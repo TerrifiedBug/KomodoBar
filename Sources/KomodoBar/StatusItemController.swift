@@ -164,6 +164,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
                 detail += " · \(region)"
             }
             let item = NSMenuItem()
+            item.title = server.name // bare name drives NSMenu type-select (jump-to by typing)
             item.attributedTitle = self.row(server.state.severity, server.name, secondary: detail)
             item.submenu = self.serverSubmenu(for: server) // hover for CPU/mem/disk + sparkline
             menu.addItem(item)
@@ -184,6 +185,17 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         let item = NSMenuItem()
         item.view = host
         submenu.addItem(item)
+        if self.store.dashboardBaseURL != nil {
+            submenu.addItem(.separator())
+            let open = NSMenuItem(
+                title: "Open in Komodo",
+                action: #selector(self.openServerInKomodo(_:)),
+                keyEquivalent: "",
+            )
+            open.target = self
+            open.representedObject = server
+            submenu.addItem(open)
+        }
         return submenu
     }
 
@@ -205,6 +217,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             let sub = NSMenu()
             for stack in self.store.stacksWithUpdates {
                 let item = NSMenuItem()
+                item.title = stack.name
                 item.attributedTitle = self.row(
                     stack.state.severity,
                     stack.name,
@@ -219,28 +232,50 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
         let visible = self.store.visibleStacks
         if visible.isEmpty {
-            self.addInfo(
-                to: menu,
-                self.store.stacks.isEmpty ? "No stacks" : "All stacks hidden by filter",
-                secondary: true,
-            )
+            self.addInfo(to: menu, self.emptyStacksMessage(), secondary: true)
         }
         for stack in visible {
-            let item = NSMenuItem()
-            var label = stack.state.displayName
-            if stack.updateAvailable { label += " · ⬆ update" }
-            item.attributedTitle = self.row(stack.state.severity, stack.name, secondary: label)
-            item.submenu = self.stackSubmenu(for: stack)
-            menu.addItem(item)
+            self.addStackRow(stack, to: menu)
         }
 
+        // Expand-all escape hatch: filtered-out stacks stay reachable (and actionable)
+        // under a submenu, so the user can e.g. redeploy a healthy hidden stack.
         if self.store.hiddenStackCount > 0 {
-            self.addInfo(
-                to: menu,
-                "\(self.store.hiddenStackCount) hidden (\(self.store.stackFilter.label.lowercased()))",
-                secondary: true,
+            let parent = NSMenuItem()
+            parent.title = "Show \(self.store.hiddenStackCount) hidden"
+            parent.attributedTitle = NSAttributedString(
+                string: "Show \(self.store.hiddenStackCount) hidden (\(self.store.stackFilter.label.lowercased()))",
+                attributes: [
+                    .foregroundColor: NSColor.secondaryLabelColor,
+                    .font: NSFont.menuFont(ofSize: NSFont.smallSystemFontSize),
+                ],
             )
+            let sub = NSMenu()
+            for stack in self.store.hiddenStacks {
+                self.addStackRow(stack, to: sub)
+            }
+            parent.submenu = sub
+            menu.addItem(parent)
         }
+    }
+
+    /// One stack row: bare `title` for type-select, coloured `attributedTitle` for
+    /// display, and the action submenu.
+    private func addStackRow(_ stack: StackListItem, to menu: NSMenu) {
+        let item = NSMenuItem()
+        item.title = stack.name // bare name drives NSMenu type-select
+        var label = stack.state.displayName
+        if stack.updateAvailable { label += " · ⬆ update" }
+        item.attributedTitle = self.row(stack.state.severity, stack.name, secondary: label)
+        item.submenu = self.stackSubmenu(for: stack)
+        menu.addItem(item)
+    }
+
+    /// Empty-stack-list copy, aware of why the list is empty.
+    private func emptyStacksMessage() -> String {
+        if self.store.stacks.isEmpty { return "No stacks" }
+        if self.store.stackFilter == .onlyProblems { return "No problems — all stacks healthy" }
+        return "All stacks hidden by filter"
     }
 
     private func stackSubmenu(for stack: StackListItem) -> NSMenu {
@@ -264,11 +299,25 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             item.representedObject = stack
             sub.addItem(item)
         }
+        if self.store.dashboardBaseURL != nil {
+            sub.addItem(.separator())
+            let open = NSMenuItem(
+                title: "Open in Komodo",
+                action: #selector(self.openStackInKomodo(_:)),
+                keyEquivalent: "",
+            )
+            open.target = self
+            open.representedObject = stack
+            sub.addItem(open)
+        }
         return sub
     }
 
     private func addFooter(to menu: NSMenu) {
         menu.addItem(.separator())
+        if self.store.dashboardBaseURL != nil {
+            self.addAction(to: menu, "Open Komodo Dashboard", #selector(self.openDashboard))
+        }
         if self.updater.canCheckForUpdates {
             self.addAction(to: menu, "Check for Updates…", #selector(self.checkAppUpdates))
         }
@@ -386,6 +435,29 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     @objc private func checkAppUpdates() {
         self.updater.checkForUpdates()
+    }
+
+    @objc private func openStackInKomodo(_ sender: NSMenuItem) {
+        guard let stack = sender.representedObject as? StackListItem else { return }
+        self.open(path: "stacks/\(stack.id)")
+    }
+
+    @objc private func openServerInKomodo(_ sender: NSMenuItem) {
+        guard let server = sender.representedObject as? ServerListItem else { return }
+        self.open(path: "servers/\(server.id)")
+    }
+
+    @objc private func openDashboard() {
+        self.open(path: nil)
+    }
+
+    /// Open a path on the connected Komodo instance in the default browser. Falls
+    /// back to the dashboard root if the resource path can't be built (e.g. behind
+    /// a reverse proxy that rewrites routes).
+    private func open(path: String?) {
+        guard let base = store.dashboardBaseURL else { return }
+        let url = path.map { base.appendingPathComponent($0) } ?? base
+        NSWorkspace.shared.open(url)
     }
 
     private func confirm(_ title: String, _ info: String, _ confirmButton: String) -> Bool {

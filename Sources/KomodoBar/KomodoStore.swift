@@ -83,9 +83,20 @@ final class KomodoStore {
         self.stacks.filter { self.stackFilter.includes($0.state) }
     }
 
+    /// Stacks the current filter is hiding — surfaced under "Show N hidden" so the
+    /// user can still act on (e.g. redeploy) a healthy stack the filter dropped.
+    var hiddenStacks: [StackListItem] {
+        self.stacks.filter { !self.stackFilter.includes($0.state) }
+    }
+
     /// How many stacks the filter is hiding right now.
     var hiddenStackCount: Int {
         self.stacks.count - self.visibleStacks.count
+    }
+
+    /// Base URL of the connected Komodo instance, for "Open in Komodo" deep-links.
+    var dashboardBaseURL: URL? {
+        self.client?.credentials.baseURL
     }
 
     /// Stacks with a pending image update — surfaced regardless of the filter.
