@@ -199,6 +199,17 @@ extension StatusItemController {
         parent.title = group.serverName // type-select jumps to a server group
         parent.attributedTitle = self.row(severity, group.serverName, secondary: badge)
         let sub = NSMenu()
+        if group.serverId != nil {
+            let batch = NSMenuItem(
+                title: "Redeploy all on \(group.serverName)…",
+                action: #selector(self.redeployServerStacks(_:)),
+                keyEquivalent: "",
+            )
+            batch.target = self
+            batch.representedObject = group
+            sub.addItem(batch)
+            sub.addItem(.separator())
+        }
         for stack in group.stacks {
             self.addStackRow(stack, to: sub)
         }

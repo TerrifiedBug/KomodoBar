@@ -31,6 +31,27 @@ extension StatusItemController {
         self.store.redeployAll()
     }
 
+    @objc func redeployUnhealthy() {
+        let count = self.store.unhealthyStacks.count
+        guard count > 0 else { return }
+        guard self.confirm(
+            "Redeploy \(count) unhealthy stack\(count == 1 ? "" : "s")?",
+            "Runs `docker compose up` on each unhealthy/dead stack. Reports how many succeeded.",
+            "Redeploy",
+        ) else { return }
+        self.store.redeployUnhealthy()
+    }
+
+    @objc func redeployServerStacks(_ sender: NSMenuItem) {
+        guard let group = sender.representedObject as? StackGroup, let serverId = group.serverId else { return }
+        guard self.confirm(
+            "Redeploy all stacks on \(group.serverName)?",
+            "Runs `docker compose up` on every stack on this server and may cause brief downtime.",
+            "Redeploy All",
+        ) else { return }
+        self.store.redeployStacks(onServer: serverId, named: group.serverName)
+    }
+
     @objc func updateAll() {
         guard self.confirm(
             "Update all stacks with pending updates?",

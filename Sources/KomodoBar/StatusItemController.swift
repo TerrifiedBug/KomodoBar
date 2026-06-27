@@ -128,6 +128,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         self.addRunMenu(to: menu)
 
         self.addAction(to: menu, "Check All Stacks for Updates", #selector(self.checkAll))
+        let unhealthy = self.store.unhealthyStacks.count
+        if unhealthy > 0 {
+            self.addAction(to: menu, "Redeploy \(unhealthy) Unhealthy…", #selector(self.redeployUnhealthy))
+        }
         self.addAction(to: menu, "Redeploy All Stacks…", #selector(self.redeployAll))
         self.addAction(to: menu, "Refresh Now", #selector(self.refresh))
         self.addRecentActivity(to: menu)

@@ -208,7 +208,7 @@ final class KomodoStore {
         UserDefaults.standard.stringArray(forKey: "komodo.recent") ?? []
     }
 
-    private func noteRecent(_ id: String) {
+    func noteRecent(_ id: String) {
         var recent = self.recentIds.filter { $0 != id }
         recent.insert(id, at: 0)
         UserDefaults.standard.set(Array(recent.prefix(self.recentLimit)), forKey: "komodo.recent")
@@ -436,91 +436,7 @@ final class KomodoStore {
         buffer[id] = history
     }
 
-    // MARK: Actions (fire, then re-poll to observe the new state)
-
-    func deploy(_ stack: StackListItem) {
-        self.noteRecent(stack.id)
-        self.run("Redeploy \(stack.name)") { try await $0.deployStack(stack.id) }
-    }
-
-    /// Apply a pending update to one stack — deploys only if its content changed,
-    /// so an already-current stack is left untouched (no downtime).
-    func deployIfChanged(_ stack: StackListItem) {
-        self.noteRecent(stack.id)
-        self.run("Update \(stack.name)") { try await $0.deployStackIfChanged(stack.id) }
-    }
-
-    /// Apply all pending updates in one shot — Core redeploys only the stacks whose
-    /// content actually changed, leaving the rest running.
-    func updateAll() {
-        self.run("Update all stacks") { try await $0.batchDeployStackIfChanged() }
-    }
-
-    func pull(_ stack: StackListItem) {
-        self.noteRecent(stack.id)
-        self.run("Pull \(stack.name)") { try await $0.pullStack(stack.id) }
-    }
-
-    func restart(_ stack: StackListItem) {
-        self.noteRecent(stack.id)
-        self.run("Restart \(stack.name)") { try await $0.restartStack(stack.id) }
-    }
-
-    func checkForUpdate(_ stack: StackListItem) {
-        self.noteRecent(stack.id)
-        self.run("Check \(stack.name)") { _ = try await $0.checkStackForUpdate(stack.id) }
-    }
-
-    /// Mark an alert resolved in Komodo, then re-poll so it drops off the list.
-    func acknowledge(_ alert: AlertItem) {
-        guard !alert.id.isEmpty else { return }
-        self.run("Acknowledge alert") { try await $0.closeAlert(alert.id) }
-    }
-
-    func redeployAll() {
-        self.run("Redeploy all stacks") { try await $0.redeployAllStacks() }
-    }
-
-    // Deployment actions (single managed containers).
-
-    func deploy(_ deployment: DeploymentListItem) {
-        self.run("Deploy \(deployment.name)") { try await $0.deployDeployment(deployment.id) }
-    }
-
-    func start(_ deployment: DeploymentListItem) {
-        self.run("Start \(deployment.name)") { try await $0.startDeployment(deployment.id) }
-    }
-
-    func stop(_ deployment: DeploymentListItem) {
-        self.run("Stop \(deployment.name)") { try await $0.stopDeployment(deployment.id) }
-    }
-
-    func restart(_ deployment: DeploymentListItem) {
-        self.run("Restart \(deployment.name)") { try await $0.restartDeployment(deployment.id) }
-    }
-
-    // Procedure / Action launcher.
-
-    func runProcedure(_ item: ExecResourceItem) {
-        self.run("Run \(item.name)") { try await $0.runProcedure(item.id) }
-    }
-
-    func runAction(_ item: ExecResourceItem) {
-        self.run("Run \(item.name)") { try await $0.runAction(item.id) }
-    }
-
-    func checkAllForUpdates() {
-        let ids = self.stacks.map(\.id)
-        self.run("Check all stacks") { client in
-            await withTaskGroup(of: Void.self) { group in
-                for id in ids {
-                    group.addTask { _ = try? await client.checkStackForUpdate(id) }
-                }
-            }
-        }
-    }
-
-    private func run(_ label: String, _ op: @escaping @Sendable (KomodoClient) async throws -> Void) {
+    func run(_ label: String, _ op: @escaping @Sendable (KomodoClient) async throws -> Void) {
         guard let client else { return }
         Task { [weak self] in
             guard let self else { return }
@@ -534,6 +450,45 @@ final class KomodoStore {
             } catch {
                 self.actionStatus = "\(label) failed"
             }
+            self.notify()
+            await self.refresh()
+            try? await Task.sleep(for: .seconds(5))
+            if self.actionStatus?.hasPrefix(label) == true {
+                self.actionStatus = nil
+                self.notify()
+            }
+        }
+    }
+
+    /// Run an op over many ids concurrently, reporting an honest success/failure
+    /// tally. Unlike a bare `try?` fan-out, a partial failure is surfaced, not
+    /// silently swallowed.
+    func runBatch(
+        _ label: String,
+        _ ids: [String],
+        _ op: @escaping @Sendable (KomodoClient, String) async throws -> Void,
+    ) {
+        guard let client, !ids.isEmpty else { return }
+        Task { [weak self] in
+            guard let self else { return }
+            self.actionStatus = "\(label)…"
+            self.notify()
+            let (ok, total) = await withTaskGroup(of: Bool.self) { group in
+                for id in ids {
+                    group.addTask {
+                        do { try await op(client, id); return true } catch { return false }
+                    }
+                }
+                var succeeded = 0
+                var count = 0
+                for await success in group {
+                    count += 1
+                    if success { succeeded += 1 }
+                }
+                return (succeeded, count)
+            }
+            let failed = total - ok
+            self.actionStatus = failed == 0 ? "\(label): \(ok) ✓" : "\(label): \(ok) ok, \(failed) failed"
             self.notify()
             await self.refresh()
             try? await Task.sleep(for: .seconds(5))
