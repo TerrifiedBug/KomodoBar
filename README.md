@@ -17,10 +17,11 @@ Destructive actions (redeploy / restart) ask for confirmation first.
 ## Install
 
 ```bash
-brew install --cask --no-quarantine terrifiedbug/tap/komodobar
+brew install --cask terrifiedbug/tap/komodobar
 ```
 
-`--no-quarantine` is needed because the build is unsigned (free); without it Gatekeeper blocks the app.
+The build is unsigned (free), so macOS quarantines it. After install, clear it:
+`xattr -dr com.apple.quarantine /Applications/KomodoBar.app` (or right-click the app → **Open** once).
 
 Or download the latest build from [Releases](https://github.com/TerrifiedBug/KomodoBar/releases),
 then right-click the app → **Open** (or `xattr -dr com.apple.quarantine KomodoBar.app`).
