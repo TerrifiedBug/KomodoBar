@@ -42,6 +42,11 @@ final class KomodoStore {
     /// Open (unresolved) Komodo alerts, newest first.
     private(set) var alerts: [AlertItem] = []
 
+    /// Deployments (single managed containers) + a rollup of raw Docker containers.
+    private(set) var deployments: [DeploymentListItem] = []
+    private(set) var deploymentsSummary: DeploymentsSummary?
+    private(set) var containersSummary: DockerContainersSummary?
+
     /// Called after any state change so the status-bar icon can repaint.
     var onChange: (@MainActor () -> Void)?
 
@@ -70,7 +75,9 @@ final class KomodoStore {
     /// those are often intentionally off (the user hides them), so counting them
     /// would keep the icon permanently red. Drives the icon tint + count.
     var attentionCount: Int {
-        (self.serversSummary?.unhealthy ?? 0) + (self.stacksSummary?.unhealthy ?? 0)
+        (self.serversSummary?.unhealthy ?? 0)
+            + (self.stacksSummary?.unhealthy ?? 0)
+            + (self.deploymentsSummary?.unhealthy ?? 0)
     }
 
     /// An unresolved CRITICAL alert turns the icon red even when the summaries miss
@@ -161,6 +168,7 @@ final class KomodoStore {
             self.connection = .unconfigured
             self.servers = []; self.stacks = []; self.serversSummary = nil; self.stacksSummary = nil
             self.alerts = []
+            self.deployments = []; self.deploymentsSummary = nil; self.containersSummary = nil
         }
         self.notify()
         self.restartPolling()
@@ -208,8 +216,16 @@ final class KomodoStore {
             self.connection = .ok
             self.lastRefresh = Date()
             await self.loadServerStats(for: serverList, using: client)
-            // Tolerant: an alerts fetch failure (older Komodo, perms) must not blank
-            // the servers/stacks we already loaded.
+            // Tolerant extras: older Komodo builds / permissions can 404 these, and a
+            // failure must not blank the servers/stacks we already loaded. Fetched
+            // concurrently.
+            async let dep = client.listDeployments()
+            async let depSum = client.deploymentsSummary()
+            async let conSum = client.dockerContainersSummary()
+            self.deployments = await ((try? dep) ?? [])
+                .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+            self.deploymentsSummary = try? await depSum
+            self.containersSummary = try? await conSum
             if let fetched = try? await client.listAlerts() {
                 self.alerts = fetched.sorted { $0.ts > $1.ts }
                 self.processAlertNotifications()
@@ -326,6 +342,24 @@ final class KomodoStore {
 
     func redeployAll() {
         self.run("Redeploy all stacks") { try await $0.redeployAllStacks() }
+    }
+
+    // Deployment actions (single managed containers).
+
+    func deploy(_ deployment: DeploymentListItem) {
+        self.run("Deploy \(deployment.name)") { try await $0.deployDeployment(deployment.id) }
+    }
+
+    func start(_ deployment: DeploymentListItem) {
+        self.run("Start \(deployment.name)") { try await $0.startDeployment(deployment.id) }
+    }
+
+    func stop(_ deployment: DeploymentListItem) {
+        self.run("Stop \(deployment.name)") { try await $0.stopDeployment(deployment.id) }
+    }
+
+    func restart(_ deployment: DeploymentListItem) {
+        self.run("Restart \(deployment.name)") { try await $0.restartDeployment(deployment.id) }
     }
 
     func checkAllForUpdates() {
