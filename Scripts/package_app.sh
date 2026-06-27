@@ -7,6 +7,12 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=/dev/null
 source "$ROOT/version.env"
 
+# Sparkle compares CFBundleVersion (the build number), not the marketing string,
+# so it MUST increase every release or updates are never detected. Derive it from
+# the git commit count — always monotonic, impossible to forget. Falls back to
+# version.env's BUILD_NUMBER outside a git checkout.
+BUILD_NUMBER="$(git -C "$ROOT" rev-list --count HEAD 2>/dev/null || echo "$BUILD_NUMBER")"
+
 CONFIG="${1:-debug}"
 APP_NAME="KomodoBar"
 BUNDLE="$ROOT/build/$APP_NAME.app"
