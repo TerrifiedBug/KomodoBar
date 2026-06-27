@@ -115,6 +115,18 @@ public struct KomodoClient: Sendable {
         try await self.fire("DeployStack", ["stack": idOrName])
     }
 
+    /// Deploy a stack only if its compose/image content changed since last deploy —
+    /// a no-op (no downtime) for unchanged stacks. The safe way to apply updates.
+    public func deployStackIfChanged(_ idOrName: String) async throws {
+        try await self.fire("DeployStackIfChanged", ["stack": idOrName])
+    }
+
+    /// Deploy every stack matching a pattern, but only those whose content changed.
+    /// `"*"` = all stacks; unchanged ones are skipped server-side (no downtime).
+    public func batchDeployStackIfChanged(pattern: String = "*") async throws {
+        try await self.fire("BatchDeployStackIfChanged", ["pattern": pattern])
+    }
+
     public func pullStack(_ idOrName: String) async throws {
         try await self.fire("PullStack", ["stack": idOrName])
     }

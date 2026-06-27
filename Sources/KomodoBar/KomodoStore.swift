@@ -219,6 +219,18 @@ final class KomodoStore {
         self.run("Redeploy \(stack.name)") { try await $0.deployStack(stack.id) }
     }
 
+    /// Apply a pending update to one stack — deploys only if its content changed,
+    /// so an already-current stack is left untouched (no downtime).
+    func deployIfChanged(_ stack: StackListItem) {
+        self.run("Update \(stack.name)") { try await $0.deployStackIfChanged(stack.id) }
+    }
+
+    /// Apply all pending updates in one shot — Core redeploys only the stacks whose
+    /// content actually changed, leaving the rest running.
+    func updateAll() {
+        self.run("Update all stacks") { try await $0.batchDeployStackIfChanged() }
+    }
+
     func pull(_ stack: StackListItem) {
         self.run("Pull \(stack.name)") { try await $0.pullStack(stack.id) }
     }
