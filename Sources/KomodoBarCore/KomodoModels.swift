@@ -114,6 +114,36 @@ public enum StackFilter: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
+// MARK: - Deployment state (single managed containers, distinct from Stacks)
+
+public enum DeploymentState: String, Sendable, CaseIterable, Decodable {
+    case deploying, running, created, restarting, stopping, removing
+    case paused, exited, dead, unhealthy, unknown
+    case notDeployed = "notdeployed"
+
+    public init(from decoder: any Decoder) throws {
+        let raw = (try? decoder.singleValueContainer().decode(String.self)) ?? ""
+        let key = raw.replacingOccurrences(of: "-", with: "").replacingOccurrences(of: "_", with: "").lowercased()
+        self = DeploymentState.allCases.first { $0.rawValue == key } ?? .unknown
+    }
+
+    public var displayName: String {
+        switch self {
+        case .notDeployed: "Not deployed"
+        default: rawValue.capitalized
+        }
+    }
+
+    public var severity: HealthSeverity {
+        switch self {
+        case .running: .healthy
+        case .dead, .unhealthy: .error
+        case .deploying, .created, .restarting, .stopping, .removing, .paused, .exited, .notDeployed: .warning
+        case .unknown: .unknown
+        }
+    }
+}
+
 // MARK: - Summaries (GetServersSummary / GetStacksSummary)
 
 public struct ServersSummary: Decodable, Sendable {
@@ -163,6 +193,50 @@ public struct StacksSummary: Decodable, Sendable {
         }
         self.total = n(.total); self.running = n(.running); self.stopped = n(.stopped)
         self.down = n(.down); self.unhealthy = n(.unhealthy); self.unknown = n(.unknown)
+    }
+}
+
+public struct DeploymentsSummary: Decodable, Sendable {
+    public let total: Int
+    public let running: Int
+    public let stopped: Int
+    public let notDeployed: Int
+    public let unhealthy: Int
+    public let unknown: Int
+
+    public var needsAttention: Int {
+        self.unhealthy
+    }
+
+    enum CodingKeys: String, CodingKey { case total, running, stopped, notDeployed, unhealthy, unknown }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        func n(_ key: CodingKeys) -> Int {
+            (try? c.decodeIfPresent(Int.self, forKey: key)) ?? 0
+        }
+        self.total = n(.total); self.running = n(.running); self.stopped = n(.stopped)
+        self.notDeployed = n(.notDeployed); self.unhealthy = n(.unhealthy); self.unknown = n(.unknown)
+    }
+}
+
+/// Rollup across all raw Docker containers on all connected servers.
+public struct DockerContainersSummary: Decodable, Sendable {
+    public let total: Int
+    public let running: Int
+    public let stopped: Int
+    public let unhealthy: Int
+    public let unknown: Int
+
+    enum CodingKeys: String, CodingKey { case total, running, stopped, unhealthy, unknown }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        func n(_ key: CodingKeys) -> Int {
+            (try? c.decodeIfPresent(Int.self, forKey: key)) ?? 0
+        }
+        self.total = n(.total); self.running = n(.running); self.stopped = n(.stopped)
+        self.unhealthy = n(.unhealthy); self.unknown = n(.unknown)
     }
 }
 
@@ -232,6 +306,23 @@ public struct StackListItem: Decodable, Sendable, Identifiable {
     /// Names of services with a pending image update.
     public var servicesWithUpdate: [String] {
         self.info.services?.filter(\.updateAvailable).map(\.service) ?? []
+    }
+}
+
+public struct DeploymentListItem: Decodable, Sendable, Identifiable {
+    public let id: String
+    public let name: String
+    public let info: Info
+
+    public struct Info: Decodable, Sendable {
+        public let state: DeploymentState
+        public let status: String?
+        public let image: String?
+        public let serverId: String?
+    }
+
+    public var state: DeploymentState {
+        self.info.state
     }
 }
 

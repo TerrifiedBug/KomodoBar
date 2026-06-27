@@ -135,6 +135,46 @@ private func decode<T: Decodable>(_: T.Type, _ json: String) throws -> T {
     #expect(!filter.includes(.down)) // intentionally-off, not a problem
 }
 
+// MARK: Deployments & containers
+
+@Test func `deployment state decodes not_deployed and maps severity`() throws {
+    #expect(try decode(DeploymentState.self, "\"running\"") == .running)
+    #expect(try decode(DeploymentState.self, "\"not_deployed\"") == .notDeployed)
+    #expect(try decode(DeploymentState.self, "\"exited\"") == .exited)
+    #expect(try decode(DeploymentState.self, "\"weird\"") == .unknown)
+    #expect(DeploymentState.running.severity == .healthy)
+    #expect(DeploymentState.unhealthy.severity == .error)
+    #expect(DeploymentState.notDeployed.severity == .warning)
+    #expect(DeploymentState.notDeployed.displayName == "Not deployed")
+}
+
+@Test func `deployment list item decodes`() throws {
+    let json = """
+    { "id": "d1", "type": "Deployment", "name": "redis", "tags": [],
+      "info": { "state": "running", "status": "Up 2h", "image": "redis:7", "server_id": "srv1" } }
+    """
+    let deployment = try decode(DeploymentListItem.self, json)
+    #expect(deployment.name == "redis")
+    #expect(deployment.state == .running)
+    #expect(deployment.info.image == "redis:7")
+    #expect(deployment.info.serverId == "srv1")
+}
+
+@Test func `deployment and container summaries decode`() throws {
+    let dep = try decode(
+        DeploymentsSummary.self,
+        "{\"total\":4,\"running\":3,\"stopped\":0,\"not_deployed\":1,\"unhealthy\":0,\"unknown\":0}",
+    )
+    #expect(dep.total == 4)
+    #expect(dep.notDeployed == 1)
+    let con = try decode(
+        DockerContainersSummary.self,
+        "{\"total\":120,\"running\":118,\"stopped\":1,\"unhealthy\":1,\"unknown\":0}",
+    )
+    #expect(con.total == 120)
+    #expect(con.unhealthy == 1)
+}
+
 // MARK: Alerts
 
 @Test func `severity level normalises and ranks`() throws {

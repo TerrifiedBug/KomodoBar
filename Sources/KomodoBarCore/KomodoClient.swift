@@ -96,6 +96,19 @@ public struct KomodoClient: Sendable {
         try await self.read("ListStacks")
     }
 
+    public func listDeployments() async throws -> [DeploymentListItem] {
+        try await self.read("ListDeployments")
+    }
+
+    public func deploymentsSummary() async throws -> DeploymentsSummary {
+        try await self.read("GetDeploymentsSummary")
+    }
+
+    /// Rollup of all raw Docker containers across servers — for the at-a-glance count.
+    public func dockerContainersSummary() async throws -> DockerContainersSummary {
+        try await self.read("GetDockerContainersSummary")
+    }
+
     /// Realtime CPU/mem/disk for one server. Served from Core's in-memory cache.
     public func systemStats(server idOrName: String) async throws -> SystemStats {
         try await self.call("read", "GetSystemStats", ["server": idOrName])
@@ -151,6 +164,24 @@ public struct KomodoClient: Sendable {
     /// Redeploy every stack matching a pattern. `"*"` = all stacks.
     public func redeployAllStacks(pattern: String = "*") async throws {
         try await self.fire("BatchDeployStack", ["pattern": pattern])
+    }
+
+    // Deployment actions (single managed containers). All take the `deployment` param.
+
+    public func deployDeployment(_ idOrName: String) async throws {
+        try await self.fire("Deploy", ["deployment": idOrName])
+    }
+
+    public func startDeployment(_ idOrName: String) async throws {
+        try await self.fire("StartDeployment", ["deployment": idOrName])
+    }
+
+    public func stopDeployment(_ idOrName: String) async throws {
+        try await self.fire("StopDeployment", ["deployment": idOrName])
+    }
+
+    public func restartDeployment(_ idOrName: String) async throws {
+        try await self.fire("RestartDeployment", ["deployment": idOrName])
     }
 
     /// Admin-only global poll for updates on poll/auto-update-enabled resources.
