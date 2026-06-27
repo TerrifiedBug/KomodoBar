@@ -95,9 +95,14 @@ extension StatusItemController {
         let visible = self.store.visibleStacks
         if visible.isEmpty {
             self.addInfo(to: menu, self.emptyStacksMessage(), secondary: true)
-        }
-        for stack in visible {
-            self.addStackRow(stack, to: menu)
+        } else if self.store.groupStacksByServer {
+            for group in self.store.visibleStackGroups {
+                self.addStackGroup(group, to: menu)
+            }
+        } else {
+            for stack in visible {
+                self.addStackRow(stack, to: menu)
+            }
         }
 
         // Expand-all escape hatch: filtered-out stacks stay reachable (and actionable)
@@ -148,6 +153,32 @@ extension StatusItemController {
             )
             item.submenu = self.stackSubmenu(for: stack)
             sub.addItem(item)
+        }
+        parent.submenu = sub
+        menu.addItem(parent)
+    }
+
+    /// A per-server group header with a rollup badge, stacks nested in its submenu.
+    private func addStackGroup(_ group: StackGroup, to menu: NSMenu) {
+        let running = group.stacks.count(where: { $0.state == .running })
+        let updates = group.stacks.filter(\.updateAvailable).count
+        var badge = "\(running)/\(group.stacks.count)"
+        if updates > 0 { badge += " ⬆\(updates)" }
+
+        let severity: HealthSeverity = if group.stacks.contains(where: { $0.state.severity == .error }) {
+            .error
+        } else if group.stacks.allSatisfy({ $0.state == .running }) {
+            .healthy
+        } else {
+            .warning
+        }
+
+        let parent = NSMenuItem()
+        parent.title = group.serverName // type-select jumps to a server group
+        parent.attributedTitle = self.row(severity, group.serverName, secondary: badge)
+        let sub = NSMenu()
+        for stack in group.stacks {
+            self.addStackRow(stack, to: sub)
         }
         parent.submenu = sub
         menu.addItem(parent)

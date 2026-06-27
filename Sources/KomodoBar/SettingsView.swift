@@ -19,6 +19,7 @@ private struct ConnectionSettingsView: View {
     @State private var apiSecret = CredentialStore.apiSecret
     @State private var pollInterval = KomodoStore.shared.pollInterval
     @State private var stackFilter = KomodoStore.shared.stackFilter
+    @State private var groupByServer = KomodoStore.shared.groupStacksByServer
     @State private var notificationsEnabled = KomodoStore.shared.notificationsEnabled
     @State private var notifyThreshold = KomodoStore.shared.notifyThreshold
 
@@ -64,6 +65,10 @@ private struct ConnectionSettingsView: View {
                 .onChange(of: self.stackFilter) { _, newValue in
                     KomodoStore.shared.stackFilter = newValue
                 }
+                Toggle("Group stacks by server", isOn: self.$groupByServer)
+                    .onChange(of: self.groupByServer) { _, newValue in
+                        KomodoStore.shared.groupStacksByServer = newValue
+                    }
             } header: {
                 Text("Display")
             } footer: {

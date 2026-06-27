@@ -119,9 +119,22 @@ final class KomodoStore {
         set { UserDefaults.standard.set(newValue.rawValue, forKey: "komodo.stackFilter"); self.notify() }
     }
 
+    /// Group the stack list under per-server headers in the menu. Persisted; off by
+    /// default so existing menus are unchanged until opted in.
+    var groupStacksByServer: Bool {
+        get { UserDefaults.standard.bool(forKey: "komodo.groupByServer") }
+        set { UserDefaults.standard.set(newValue, forKey: "komodo.groupByServer"); self.notify() }
+    }
+
     /// Stacks shown in the menu after applying `stackFilter`.
     var visibleStacks: [StackListItem] {
         self.stacks.filter { self.stackFilter.includes($0.state) }
+    }
+
+    /// Visible stacks grouped by server, for the grouped menu layout.
+    var visibleStackGroups: [StackGroup] {
+        let names = Dictionary(servers.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
+        return makeStackGroups(self.visibleStacks, serverNames: names)
     }
 
     /// Stacks the current filter is hiding — surfaced under "Show N hidden" so the
