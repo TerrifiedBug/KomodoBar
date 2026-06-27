@@ -101,12 +101,25 @@ public struct KomodoClient: Sendable {
         try await self.call("read", "GetSystemStats", ["server": idOrName])
     }
 
+    /// Open (unresolved) alerts, newest first as returned by Core. Pass
+    /// `unresolvedOnly: false` to include resolved history.
+    public func listAlerts(unresolvedOnly: Bool = true) async throws -> [AlertItem] {
+        let query: [String: Any] = unresolvedOnly ? ["resolved": false] : [:]
+        let page: AlertsPage = try await self.call("read", "ListAlerts", ["query": query])
+        return page.alerts
+    }
+
     // MARK: Writes
 
     /// Actively poll registries for newer images for a single stack and refresh
     /// its cache. `skip_auto_update` keeps this read-only (no auto redeploy).
     public func checkStackForUpdate(_ idOrName: String) async throws -> CheckStackForUpdateResponse {
         try await self.call("write", "CheckStackForUpdate", ["stack": idOrName, "skip_auto_update": true])
+    }
+
+    /// Mark an alert resolved (acknowledged) by its id.
+    public func closeAlert(_ id: String) async throws {
+        _ = try await self.perform("write", "CloseAlert", ["id": id])
     }
 
     // MARK: Executes (fire-and-refresh)

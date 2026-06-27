@@ -135,6 +135,52 @@ private func decode<T: Decodable>(_: T.Type, _ json: String) throws -> T {
     #expect(!filter.includes(.down)) // intentionally-off, not a problem
 }
 
+// MARK: Alerts
+
+@Test func `severity level normalises and ranks`() throws {
+    #expect(try decode(SeverityLevel.self, "\"CRITICAL\"") == .critical)
+    #expect(try decode(SeverityLevel.self, "\"Warning\"") == .warning)
+    #expect(try decode(SeverityLevel.self, "\"ok\"") == .ok)
+    #expect(try decode(SeverityLevel.self, "\"NEW_LEVEL\"") == .unknown)
+    // Threshold logic relies on rank ordering; unknown ranks high so it isn't hidden.
+    #expect(SeverityLevel.critical.rank > SeverityLevel.warning.rank)
+    #expect(SeverityLevel.warning.rank > SeverityLevel.ok.rank)
+    #expect(SeverityLevel.unknown.rank >= SeverityLevel.warning.rank)
+}
+
+@Test func `alert item decodes id target and kind`() throws {
+    let json = """
+    { "_id": "alert123", "ts": 1735689600000, "level": "CRITICAL", "resolved": false,
+      "target": { "type": "Stack", "id": "s1" },
+      "data": { "type": "StackStateChange", "data": { "from": "running", "to": "down" } } }
+    """
+    let alert = try decode(AlertItem.self, json)
+    #expect(alert.id == "alert123")
+    #expect(alert.level == .critical)
+    #expect(alert.resolved == false)
+    #expect(alert.targetType == "Stack")
+    #expect(alert.targetId == "s1")
+    #expect(alert.kind == "StackStateChange")
+}
+
+@Test func `alert item tolerates oid object and missing data`() throws {
+    let json = """
+    { "_id": { "$oid": "abc" }, "ts": 1, "level": "WARNING", "resolved": true,
+      "target": { "type": "Server", "id": "srv1" } }
+    """
+    let alert = try decode(AlertItem.self, json)
+    #expect(alert.id == "abc")
+    #expect(alert.resolved == true)
+    #expect(alert.kind == nil)
+}
+
+@Test func `alerts page decodes and tolerates absent list`() throws {
+    let page = try decode(AlertsPage.self, "{ \"alerts\": [], \"next_page\": null }")
+    #expect(page.alerts.isEmpty)
+    let empty = try decode(AlertsPage.self, "{}")
+    #expect(empty.alerts.isEmpty)
+}
+
 // MARK: Credentials parsing
 
 @Test func `credentials reject invalid UR ls`() {

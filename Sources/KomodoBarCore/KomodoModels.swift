@@ -278,3 +278,95 @@ public struct CheckStackForUpdateResponse: Decodable, Sendable {
         self.services.contains { $0.updateAvailable }
     }
 }
+
+// MARK: - Alerts (ListAlerts)
+
+/// Komodo alert severity. Wire form is `OK` / `WARNING` / `CRITICAL`.
+public enum SeverityLevel: String, Sendable, CaseIterable, Decodable {
+    case ok, warning, critical, unknown
+
+    public init(from decoder: any Decoder) throws {
+        let raw = (try? decoder.singleValueContainer().decode(String.self)) ?? ""
+        self = SeverityLevel(rawValue: raw.lowercased()) ?? .unknown
+    }
+
+    /// Ordering for "notify at this level and above". `unknown` ranks high so a new
+    /// wire value is surfaced rather than silently suppressed by a threshold.
+    public var rank: Int {
+        switch self {
+        case .ok: 0
+        case .warning: 1
+        case .critical: 2
+        case .unknown: 2
+        }
+    }
+
+    public var displayName: String {
+        switch self {
+        case .ok: "OK"
+        case .warning: "Warning"
+        case .critical: "Critical"
+        case .unknown: "Alert"
+        }
+    }
+
+    public var severity: HealthSeverity {
+        switch self {
+        case .ok: .healthy
+        case .warning: .warning
+        case .critical: .error
+        case .unknown: .unknown
+        }
+    }
+}
+
+/// One Komodo alert. The `data` union carries per-variant fields we don't model;
+/// we keep the variant name (`kind`) and the target so the UI can build a label.
+public struct AlertItem: Decodable, Sendable, Identifiable {
+    public let id: String
+    public let ts: Double // epoch milliseconds
+    public let level: SeverityLevel
+    public let resolved: Bool
+    public let targetType: String?
+    public let targetId: String?
+    public let kind: String? // AlertData variant, e.g. "StackStateChange"
+
+    public var date: Date {
+        Date(timeIntervalSince1970: self.ts / 1000)
+    }
+
+    enum CodingKeys: String, CodingKey { case id = "_id", ts, level, resolved, target, data }
+    private struct Target: Decodable { let type: String?; let id: String? }
+    private struct DataBlock: Decodable { let type: String? }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        // `_id` is usually a hex string but can arrive as { "$oid": "…" }.
+        if let s = try? c.decode(String.self, forKey: .id) {
+            self.id = s
+        } else if let oid = try? c.decode([String: String].self, forKey: .id) {
+            self.id = oid["$oid"] ?? ""
+        } else {
+            self.id = ""
+        }
+        self.ts = (try? c.decode(Double.self, forKey: .ts)) ?? 0
+        self.level = (try? c.decode(SeverityLevel.self, forKey: .level)) ?? .unknown
+        self.resolved = (try? c.decode(Bool.self, forKey: .resolved)) ?? false
+        let target = try? c.decode(Target.self, forKey: .target)
+        self.targetType = target?.type
+        self.targetId = target?.id
+        self.kind = (try? c.decode(DataBlock.self, forKey: .data))?.type
+    }
+}
+
+/// Response for ListAlerts.
+public struct AlertsPage: Decodable, Sendable {
+    public let alerts: [AlertItem]
+
+    enum CodingKeys: String, CodingKey { case alerts }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.alerts = (try? c.decode([AlertItem].self, forKey: .alerts)) ?? []
+    }
+}
