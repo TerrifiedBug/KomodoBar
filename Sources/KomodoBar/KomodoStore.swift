@@ -71,19 +71,33 @@ final class KomodoStore {
         self.client != nil
     }
 
-    /// Genuinely unhealthy things worth a red alert. Excludes `down` stacks —
-    /// those are often intentionally off (the user hides them), so counting them
-    /// would keep the icon permanently red. Drives the icon tint + count.
+    /// Stacks worth a red alert: genuinely broken (unhealthy/dead) and not muted or
+    /// snoozed. Excludes `down` — that's intentionally-off, not a problem.
+    var attentionStacks: [StackListItem] {
+        self.stacks.filter { ($0.state == .unhealthy || $0.state == .dead) && !self.isSuppressed($0.id) }
+    }
+
+    var attentionServers: [ServerListItem] {
+        self.servers.filter { $0.state == .notOk && !self.isSuppressed($0.id) }
+    }
+
+    var attentionDeployments: [DeploymentListItem] {
+        self.deployments.filter { ($0.state == .unhealthy || $0.state == .dead) && !self.isSuppressed($0.id) }
+    }
+
+    /// Genuinely unhealthy things worth a red alert, computed from the live lists so
+    /// muting/snoozing a resource removes it. Drives the icon tint + count.
     var attentionCount: Int {
-        (self.serversSummary?.unhealthy ?? 0)
-            + (self.stacksSummary?.unhealthy ?? 0)
-            + (self.deploymentsSummary?.unhealthy ?? 0)
+        self.attentionStacks.count + self.attentionServers.count + self.attentionDeployments.count
     }
 
     /// An unresolved CRITICAL alert turns the icon red even when the summaries miss
-    /// it — so the badge can't under-report a live incident.
+    /// it — so the badge can't under-report a live incident. A muted/snoozed target
+    /// is excluded so suppression also silences its alert.
     var hasCriticalAlert: Bool {
-        self.alerts.contains { !$0.resolved && $0.level == .critical }
+        self.alerts.contains {
+            !$0.resolved && $0.level == .critical && !($0.targetId.map(self.isSuppressed) ?? false)
+        }
     }
 
     var needsAttention: Bool {
@@ -200,6 +214,52 @@ final class KomodoStore {
         let pinned = self.stacks.filter { self.pinnedIds.contains($0.id) }
         let recent = self.recentIds.compactMap { byId[$0] }.filter { !self.pinnedIds.contains($0.id) }
         return Array((pinned + recent).prefix(10))
+    }
+
+    // MARK: Mute & snooze (keep "red = unacknowledged" trustworthy)
+
+    /// Resource ids muted indefinitely. Persisted.
+    var mutedIds: Set<String> {
+        get { Set(UserDefaults.standard.stringArray(forKey: "komodo.muted") ?? []) }
+        set { UserDefaults.standard.set(Array(newValue), forKey: "komodo.muted"); self.notify() }
+    }
+
+    /// Resource id → epoch seconds until which it's snoozed. Persisted.
+    private var snoozeUntil: [String: Double] {
+        get { (UserDefaults.standard.dictionary(forKey: "komodo.snooze") as? [String: Double]) ?? [:] }
+        set { UserDefaults.standard.set(newValue, forKey: "komodo.snooze") }
+    }
+
+    func isMuted(_ id: String) -> Bool {
+        self.mutedIds.contains(id)
+    }
+
+    func isSnoozed(_ id: String) -> Bool {
+        (self.snoozeUntil[id] ?? 0) > Date().timeIntervalSince1970
+    }
+
+    func isSuppressed(_ id: String) -> Bool {
+        self.isMuted(id) || self.isSnoozed(id)
+    }
+
+    func toggleMute(_ id: String) {
+        var muted = self.mutedIds
+        if muted.contains(id) { muted.remove(id) } else { muted.insert(id) }
+        self.mutedIds = muted
+    }
+
+    func snooze(_ id: String, seconds: TimeInterval) {
+        var map = self.snoozeUntil
+        map[id] = Date().addingTimeInterval(seconds).timeIntervalSince1970
+        self.snoozeUntil = map
+        self.notify()
+    }
+
+    func clearSnooze(_ id: String) {
+        var map = self.snoozeUntil
+        map[id] = nil
+        self.snoozeUntil = map
+        self.notify()
     }
 
     // MARK: Lifecycle
@@ -327,7 +387,10 @@ final class KomodoStore {
         defer { if maxTs > last { UserDefaults.standard.set(maxTs, forKey: self.lastSeenAlertKey) } }
         guard last > 0 else { return } // baseline the first time so we don't replay history
 
-        let fresh = self.alerts.filter { !$0.resolved && $0.ts > last && $0.level.rank >= self.notifyThreshold.rank }
+        let fresh = self.alerts.filter {
+            !$0.resolved && $0.ts > last && $0.level.rank >= self.notifyThreshold.rank
+                && !($0.targetId.map(self.isSuppressed) ?? false)
+        }
         for alert in fresh {
             let name = self.resourceName(forType: alert.targetType, id: alert.targetId)
             self.notifier.notify(

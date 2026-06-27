@@ -15,7 +15,7 @@ extension StatusItemController {
             item.title = deployment.name // type-select
             item.attributedTitle = self.row(
                 deployment.state.severity,
-                deployment.name,
+                "\(self.suppressionPrefix(deployment.id))\(deployment.name)",
                 secondary: deployment.state.displayName,
             )
             item.submenu = self.deploymentSubmenu(for: deployment)
@@ -59,8 +59,9 @@ extension StatusItemController {
             item.representedObject = deployment
             sub.addItem(item)
         }
+        sub.addItem(.separator())
+        self.addMuteItems(forId: deployment.id, to: sub)
         if self.store.dashboardBaseURL != nil {
-            sub.addItem(.separator())
             let open = NSMenuItem(
                 title: "Open in Komodo",
                 action: #selector(self.openDeploymentInKomodo(_:)),

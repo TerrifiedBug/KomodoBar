@@ -47,7 +47,8 @@ extension StatusItemController {
             }
             let item = NSMenuItem()
             item.title = server.name // bare name drives NSMenu type-select (jump-to by typing)
-            item.attributedTitle = self.row(server.state.severity, server.name, secondary: detail)
+            let name = "\(self.suppressionPrefix(server.id))\(server.name)"
+            item.attributedTitle = self.row(server.state.severity, name, secondary: detail)
             item.submenu = self.serverSubmenu(for: server) // hover for CPU/mem/disk + sparkline
             menu.addItem(item)
         }
@@ -67,8 +68,9 @@ extension StatusItemController {
         let item = NSMenuItem()
         item.view = host
         submenu.addItem(item)
+        submenu.addItem(.separator())
+        self.addMuteItems(forId: server.id, to: submenu)
         if self.store.dashboardBaseURL != nil {
-            submenu.addItem(.separator())
             let open = NSMenuItem(
                 title: "Open in Komodo",
                 action: #selector(self.openServerInKomodo(_:)),
@@ -93,7 +95,8 @@ extension StatusItemController {
             let pin = self.store.isPinned(stack.id) ? "★ " : ""
             var label = stack.state.displayName
             if stack.updateAvailable { label += " · ⬆ update" }
-            item.attributedTitle = self.row(stack.state.severity, "\(pin)\(stack.name)", secondary: label)
+            let name = "\(self.suppressionPrefix(stack.id))\(pin)\(stack.name)"
+            item.attributedTitle = self.row(stack.state.severity, name, secondary: label)
             item.submenu = self.stackSubmenu(for: stack)
             menu.addItem(item)
         }
@@ -210,7 +213,8 @@ extension StatusItemController {
         item.title = stack.name // bare name drives NSMenu type-select
         var label = stack.state.displayName
         if stack.updateAvailable { label += " · ⬆ update" }
-        item.attributedTitle = self.row(stack.state.severity, stack.name, secondary: label)
+        let name = "\(self.suppressionPrefix(stack.id))\(stack.name)"
+        item.attributedTitle = self.row(stack.state.severity, name, secondary: label)
         item.submenu = self.stackSubmenu(for: stack)
         menu.addItem(item)
     }
@@ -253,6 +257,7 @@ extension StatusItemController {
         pin.target = self
         pin.representedObject = stack
         sub.addItem(pin)
+        self.addMuteItems(forId: stack.id, to: sub)
         if self.store.dashboardBaseURL != nil {
             let open = NSMenuItem(
                 title: "Open in Komodo",
