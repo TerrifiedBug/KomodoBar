@@ -117,6 +117,12 @@ public struct KomodoClient: Sendable {
         try await self.read("ListActions")
     }
 
+    /// The latest page of the operation history (newest first).
+    public func listUpdates() async throws -> [UpdateListItem] {
+        let page: UpdatesPage = try await self.call("read", "ListUpdates", [:])
+        return page.updates
+    }
+
     /// Realtime CPU/mem/disk for one server. Served from Core's in-memory cache.
     public func systemStats(server idOrName: String) async throws -> SystemStats {
         try await self.call("read", "GetSystemStats", ["server": idOrName])
@@ -213,7 +219,16 @@ public struct KomodoClient: Sendable {
     }
 
     private func fire(_ name: String, _ body: [String: Any]) async throws {
-        _ = try await self.perform("execute", name, body)
+        let data = try await self.perform("execute", name, body)
+        // Komodo returns the resulting Update on a 200 even when the operation itself
+        // failed. Surface a *completed* failure as an error so the UI stops claiming
+        // success on a 200 that actually failed. Batch responses are arrays and won't
+        // decode here, so they're left to their own (future) handling.
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        if let update = try? decoder.decode(KomodoUpdate.self, from: data), update.completed, !update.success {
+            throw KomodoError(status: 0, message: "Komodo reported the operation failed")
+        }
     }
 
     private func call<T: Decodable>(_ group: String, _ name: String, _ body: [String: Any]) async throws -> T {

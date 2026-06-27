@@ -255,6 +255,34 @@ private func decode<T: Decodable>(_: T.Type, _ json: String) throws -> T {
     #expect(groups[2].stacks.map(\.id).sorted() == ["c", "d"]) // nil + unknown server id
 }
 
+// MARK: Updates / honest action tracking
+
+@Test func `komodo update only flags completed failures`() throws {
+    // Completed + failed → a real failure.
+    let failed = try decode(KomodoUpdate.self, "{ \"success\": false, \"status\": \"Complete\" }")
+    #expect(failed.completed)
+    #expect(!failed.success)
+    // In-progress + not-yet-successful is NOT a failure.
+    let running = try decode(KomodoUpdate.self, "{ \"success\": false, \"status\": \"InProgress\" }")
+    #expect(!running.completed)
+    // Absent success defaults to true so NoData responses don't fabricate failures.
+    let noData = try decode(KomodoUpdate.self, "{}")
+    #expect(noData.success)
+}
+
+@Test func `update list item decodes target and severity`() throws {
+    let json = """
+    { "id": "u1", "operation": "DeployStack", "success": false, "status": "Complete",
+      "start_ts": 1735689600000, "target": { "type": "Stack", "id": "s1" } }
+    """
+    let update = try decode(UpdateListItem.self, json)
+    #expect(update.operation == "DeployStack")
+    #expect(update.targetId == "s1")
+    #expect(update.severity == .error) // completed + failed
+    let ok = try decode(UpdateListItem.self, "{ \"id\": \"u2\", \"success\": true, \"start_ts\": 1 }")
+    #expect(ok.severity == .healthy)
+}
+
 // MARK: Credentials parsing
 
 @Test func `credentials reject invalid UR ls`() {
