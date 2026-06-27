@@ -4,12 +4,17 @@ import SwiftUI
 
 /// Owns the menu-bar `NSStatusItem` and rebuilds its menu from `KomodoStore`
 /// each time it opens.
+///
+/// Menu construction lives in `StatusItemController+Menu`; action handlers in
+/// `StatusItemController+Actions`. Shared menu primitives (`addInfo`, `addAction`,
+/// `row`) and the stored dependencies are module-internal so those extensions can
+/// reach them across files.
 @MainActor
 final class StatusItemController: NSObject, NSMenuDelegate {
-    private let statusItem: NSStatusItem
-    private let store: KomodoStore
-    private let updater: any UpdaterProviding
-    private let settingsWindow = SettingsWindowController()
+    let statusItem: NSStatusItem
+    let store: KomodoStore
+    let updater: any UpdaterProviding
+    let settingsWindow = SettingsWindowController()
 
     init(store: KomodoStore, updater: any UpdaterProviding) {
         self.store = store
@@ -112,175 +117,29 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             return
         }
 
+        self.addAlerts(to: menu) // adds its own trailing separator when non-empty
+        self.addQuickAccess(to: menu) // adds its own trailing separator when non-empty
         self.addServers(to: menu)
         menu.addItem(.separator())
         self.addStacks(to: menu)
         menu.addItem(.separator())
+        self.addDeployments(to: menu) // self-guards + adds its own trailing separator
+        self.addRunMenu(to: menu)
 
         self.addAction(to: menu, "Check All Stacks for Updates", #selector(self.checkAll))
+        let unhealthy = self.store.unhealthyStacks.count
+        if unhealthy > 0 {
+            self.addAction(to: menu, "Redeploy \(unhealthy) Unhealthy…", #selector(self.redeployUnhealthy))
+        }
         self.addAction(to: menu, "Redeploy All Stacks…", #selector(self.redeployAll))
         self.addAction(to: menu, "Refresh Now", #selector(self.refresh))
+        self.addRecentActivity(to: menu)
         self.addFooter(to: menu)
     }
 
-    private func addHeader(to menu: NSMenu) {
-        let title = NSMenuItem()
-        title.attributedTitle = NSAttributedString(
-            string: "KomodoBar",
-            attributes: [.font: NSFont.boldSystemFont(ofSize: NSFont.systemFontSize)],
-        )
-        title.isEnabled = false
-        menu.addItem(title)
+    // MARK: Shared menu primitives
 
-        switch self.store.connection {
-        case .ok:
-            if let date = store.lastRefresh {
-                self.addInfo(to: menu, "Updated \(Self.timeFormatter.string(from: date))", secondary: true)
-            }
-        case let .error(message):
-            self.addInfo(to: menu, "⚠︎ \(message)", secondary: true)
-        case .authFailed:
-            self.addInfo(to: menu, "⚠︎ Authentication failed", secondary: true)
-        case .unconfigured:
-            self.addInfo(to: menu, "Not connected", secondary: true)
-        }
-        if let status = store.actionStatus {
-            self.addInfo(to: menu, status, secondary: true)
-        }
-    }
-
-    private func addServers(to menu: NSMenu) {
-        let summary = self.store.serversSummary
-        let header = summary.map { "Servers — \($0.healthy)/\($0.total) healthy" } ?? "Servers"
-        self.addInfo(to: menu, header)
-        if self.store.servers.isEmpty {
-            self.addInfo(to: menu, "No servers", secondary: true)
-        }
-        for server in self.store.servers {
-            var detail = server.state.displayName
-            if let stats = store.serverStats[server.id] {
-                detail += " · CPU \(Int(stats.cpuPerc.rounded()))%"
-            } else if let region = server.info.region, !region.isEmpty {
-                detail += " · \(region)"
-            }
-            let item = NSMenuItem()
-            item.attributedTitle = self.row(server.state.severity, server.name, secondary: detail)
-            item.submenu = self.serverSubmenu(for: server) // hover for CPU/mem/disk + sparkline
-            menu.addItem(item)
-        }
-    }
-
-    private func serverSubmenu(for server: ServerListItem) -> NSMenu {
-        let submenu = NSMenu()
-        let host = NSHostingView(rootView: ServerDetailView(
-            version: server.info.version,
-            address: server.info.address,
-            stats: self.store.serverStats[server.id],
-            cpuHistory: self.store.cpuHistory[server.id] ?? [],
-            memHistory: self.store.memHistory[server.id] ?? [],
-            diskHistory: self.store.diskHistory[server.id] ?? [],
-        ))
-        host.frame = NSRect(x: 0, y: 0, width: 260, height: max(host.fittingSize.height, 60))
-        let item = NSMenuItem()
-        item.view = host
-        submenu.addItem(item)
-        return submenu
-    }
-
-    private func addStacks(to menu: NSMenu) {
-        let summary = self.store.stacksSummary
-        let header = summary.map { "Stacks — \($0.running)/\($0.total) running" } ?? "Stacks"
-        self.addInfo(to: menu, header)
-
-        // Surface pending updates prominently, above the (possibly filtered) list,
-        // covering ALL stacks so a hidden one's update isn't missed.
-        if self.store.updateCount > 0 {
-            let plural = self.store.updateCount == 1 ? "" : "s"
-            let parent = NSMenuItem()
-            parent.attributedTitle = self.row(
-                .warning,
-                "⬆ \(self.store.updateCount) update\(plural) available",
-                secondary: nil,
-            )
-            let sub = NSMenu()
-            for stack in self.store.stacksWithUpdates {
-                let item = NSMenuItem()
-                item.attributedTitle = self.row(
-                    stack.state.severity,
-                    stack.name,
-                    secondary: stack.servicesWithUpdate.joined(separator: ", "),
-                )
-                item.submenu = self.stackSubmenu(for: stack)
-                sub.addItem(item)
-            }
-            parent.submenu = sub
-            menu.addItem(parent)
-        }
-
-        let visible = self.store.visibleStacks
-        if visible.isEmpty {
-            self.addInfo(
-                to: menu,
-                self.store.stacks.isEmpty ? "No stacks" : "All stacks hidden by filter",
-                secondary: true,
-            )
-        }
-        for stack in visible {
-            let item = NSMenuItem()
-            var label = stack.state.displayName
-            if stack.updateAvailable { label += " · ⬆ update" }
-            item.attributedTitle = self.row(stack.state.severity, stack.name, secondary: label)
-            item.submenu = self.stackSubmenu(for: stack)
-            menu.addItem(item)
-        }
-
-        if self.store.hiddenStackCount > 0 {
-            self.addInfo(
-                to: menu,
-                "\(self.store.hiddenStackCount) hidden (\(self.store.stackFilter.label.lowercased()))",
-                secondary: true,
-            )
-        }
-    }
-
-    private func stackSubmenu(for stack: StackListItem) -> NSMenu {
-        let sub = NSMenu()
-        if let status = stack.info.status, !status.isEmpty {
-            self.addInfo(to: sub, status, secondary: true)
-        }
-        if stack.updateAvailable {
-            self.addInfo(to: sub, "Updates: \(stack.servicesWithUpdate.joined(separator: ", "))", secondary: true)
-        }
-        if sub.numberOfItems > 0 { sub.addItem(.separator()) }
-
-        for (title, selector) in [
-            ("Redeploy…", #selector(self.stackDeploy(_:))),
-            ("Pull Images", #selector(self.stackPull(_:))),
-            ("Restart…", #selector(self.stackRestart(_:))),
-            ("Check for Updates", #selector(self.stackCheck(_:))),
-        ] {
-            let item = NSMenuItem(title: title, action: selector, keyEquivalent: "")
-            item.target = self
-            item.representedObject = stack
-            sub.addItem(item)
-        }
-        return sub
-    }
-
-    private func addFooter(to menu: NSMenu) {
-        menu.addItem(.separator())
-        if self.updater.canCheckForUpdates {
-            self.addAction(to: menu, "Check for Updates…", #selector(self.checkAppUpdates))
-        }
-        let settings = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
-        settings.target = self
-        menu.addItem(settings)
-        menu.addItem(withTitle: "Quit KomodoBar", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
-    }
-
-    // MARK: Menu-building helpers
-
-    private func addInfo(to menu: NSMenu, _ text: String, secondary: Bool = false) {
+    func addInfo(to menu: NSMenu, _ text: String, secondary: Bool = false) {
         let item = NSMenuItem()
         if secondary {
             item.attributedTitle = NSAttributedString(string: text, attributes: [
@@ -295,14 +154,15 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     }
 
     @discardableResult
-    private func addAction(to menu: NSMenu, _ title: String, _ selector: Selector) -> NSMenuItem {
+    func addAction(to menu: NSMenu, _ title: String, _ selector: Selector) -> NSMenuItem {
         let item = NSMenuItem(title: title, action: selector, keyEquivalent: "")
         item.target = self
         menu.addItem(item)
         return item
     }
 
-    private func row(_ severity: HealthSeverity, _ text: String, secondary: String?) -> NSAttributedString {
+    /// A coloured status dot + label, with an optional secondary detail string.
+    func row(_ severity: HealthSeverity, _ text: String, secondary: String?) -> NSAttributedString {
         let result = NSMutableAttributedString()
         result.append(NSAttributedString(string: "● ", attributes: [.foregroundColor: Self.color(for: severity)]))
         result.append(NSAttributedString(string: text, attributes: [.foregroundColor: NSColor.labelColor]))
@@ -315,7 +175,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         return result
     }
 
-    private static func color(for severity: HealthSeverity) -> NSColor {
+    static func color(for severity: HealthSeverity) -> NSColor {
         switch severity {
         case .healthy: .systemGreen
         case .warning: .systemOrange
@@ -324,78 +184,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         }
     }
 
-    private static let timeFormatter: DateFormatter = {
+    static let timeFormatter: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "HH:mm:ss"
         return f
     }()
-
-    // MARK: Actions
-
-    /// Internal so AppDelegate can trigger it (e.g. for headless verification).
-    func showSettings() {
-        self.settingsWindow.show()
-    }
-
-    @objc private func openSettings() {
-        self.showSettings()
-    }
-
-    @objc private func refresh() {
-        self.store.refreshNow()
-    }
-
-    @objc private func checkAll() {
-        self.store.checkAllForUpdates()
-    }
-
-    @objc private func redeployAll() {
-        guard self.confirm(
-            "Redeploy all stacks?",
-            "This runs `docker compose up` on every stack and may cause brief downtime.",
-            "Redeploy All",
-        ) else { return }
-        self.store.redeployAll()
-    }
-
-    @objc private func stackDeploy(_ sender: NSMenuItem) {
-        guard let stack = sender.representedObject as? StackListItem else { return }
-        guard self.confirm(
-            "Redeploy \(stack.name)?",
-            "Runs `docker compose up` and may cause brief downtime.",
-            "Redeploy",
-        ) else { return }
-        self.store.deploy(stack)
-    }
-
-    @objc private func stackPull(_ sender: NSMenuItem) {
-        guard let stack = sender.representedObject as? StackListItem else { return }
-        self.store.pull(stack)
-    }
-
-    @objc private func stackRestart(_ sender: NSMenuItem) {
-        guard let stack = sender.representedObject as? StackListItem else { return }
-        guard self.confirm("Restart \(stack.name)?", "Runs `docker compose restart`.", "Restart") else { return }
-        self.store.restart(stack)
-    }
-
-    @objc private func stackCheck(_ sender: NSMenuItem) {
-        guard let stack = sender.representedObject as? StackListItem else { return }
-        self.store.checkForUpdate(stack)
-    }
-
-    @objc private func checkAppUpdates() {
-        self.updater.checkForUpdates()
-    }
-
-    private func confirm(_ title: String, _ info: String, _ confirmButton: String) -> Bool {
-        let alert = NSAlert()
-        alert.messageText = title
-        alert.informativeText = info
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: confirmButton)
-        alert.addButton(withTitle: "Cancel")
-        NSApp.activate(ignoringOtherApps: true)
-        return alert.runModal() == .alertFirstButtonReturn
-    }
 }

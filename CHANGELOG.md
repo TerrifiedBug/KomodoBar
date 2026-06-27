@@ -2,6 +2,24 @@
 
 All notable changes to KomodoBar are documented here (Keep a Changelog style).
 
+## 0.2.0
+### Added
+- **Find by name** — start typing in the menu to jump to a stack/server/deployment (NSMenu type-select).
+- **Open in Komodo** — deep-link any stack, server, or deployment (and an "Open Komodo Dashboard" item) to the web UI.
+- **Filters** — "Hide off stacks" (down + stopped, the default) and "Only problems", plus a "Show N hidden" submenu (problems/transient listed directly; the "Off" and "Running" buckets collapse into nested groups) and an optional "Always hide off stacks" setting that removes them entirely.
+- **Update All** — apply pending updates with one click via deploy-if-changed (unchanged stacks keep running); per-stack "Update (deploy if changed)" alongside a force-redeploy.
+- **Background notifications** — macOS notifications when Komodo raises a new alert, with an enable toggle + severity threshold; an Alerts section with one-tap Acknowledge.
+- **Deployments** — a Deployments section (deploy/start/stop/restart), for container-only setups.
+- **Per-server grouping** (optional) with running/updates rollup badges, and "Redeploy all on <server>".
+- **Quick Access** — pinned (★) and recently-used stacks at the top of the menu.
+- **Mute & snooze** — silence a noisy stack/server/deployment (🔕) so "red" means "unacknowledged".
+- **Run launcher** — fire Komodo Procedures and Actions from the menu.
+- **Recent Activity** — a feed of recent operations with success/failure dots.
+- **Redeploy N Unhealthy** — one-click redeploy of every broken stack.
+### Fixed
+- Actions no longer report success on an HTTP 200 that actually failed — a completed-but-failed Update is surfaced as a failure.
+- Batch actions report an honest "N ok, M failed" tally instead of silently swallowing per-item errors.
+
 ## 0.1.3
 - Releases are now built and published by CI on a `vX.Y.Z` tag (build → signed appcast → GitHub Release → Homebrew cask). No functional app changes since 0.1.2.
 

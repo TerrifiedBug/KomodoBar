@@ -107,12 +107,23 @@ private func decode<T: Decodable>(_: T.Type, _ json: String) throws -> T {
 
 // MARK: Stack filter
 
-@Test func `stack filter hide down hides only down`() {
-    let filter = StackFilter.hideDown
+@Test func `stack filter hide off hides down and stopped`() {
+    let filter = StackFilter.hideOff
     #expect(filter.includes(.running))
-    #expect(filter.includes(.stopped)) // stopped stays — it's not "down"
     #expect(filter.includes(.unhealthy))
-    #expect(!filter.includes(.down))
+    #expect(!filter.includes(.down)) // off
+    #expect(!filter.includes(.stopped)) // off
+}
+
+@Test func `stack state off and problem helpers`() {
+    #expect(StackState.down.isOff)
+    #expect(StackState.stopped.isOff)
+    #expect(!StackState.running.isOff)
+    #expect(!StackState.unhealthy.isOff)
+    #expect(StackState.unhealthy.isProblem)
+    #expect(StackState.dead.isProblem)
+    #expect(!StackState.down.isProblem) // off, not a problem
+    #expect(!StackState.running.isProblem)
 }
 
 @Test func `stack filter running only`() {
@@ -124,6 +135,157 @@ private func decode<T: Decodable>(_: T.Type, _ json: String) throws -> T {
 
 @Test func `stack filter all shows everything`() {
     #expect(StackState.allCases.allSatisfy { StackFilter.all.includes($0) })
+}
+
+@Test func `stack filter only problems shows unhealthy and dead`() {
+    let filter = StackFilter.onlyProblems
+    #expect(filter.includes(.unhealthy))
+    #expect(filter.includes(.dead))
+    #expect(!filter.includes(.running))
+    #expect(!filter.includes(.stopped))
+    #expect(!filter.includes(.down)) // intentionally-off, not a problem
+}
+
+// MARK: Deployments & containers
+
+@Test func `deployment state decodes not_deployed and maps severity`() throws {
+    #expect(try decode(DeploymentState.self, "\"running\"") == .running)
+    #expect(try decode(DeploymentState.self, "\"not_deployed\"") == .notDeployed)
+    #expect(try decode(DeploymentState.self, "\"exited\"") == .exited)
+    #expect(try decode(DeploymentState.self, "\"weird\"") == .unknown)
+    #expect(DeploymentState.running.severity == .healthy)
+    #expect(DeploymentState.unhealthy.severity == .error)
+    #expect(DeploymentState.notDeployed.severity == .warning)
+    #expect(DeploymentState.notDeployed.displayName == "Not deployed")
+}
+
+@Test func `deployment list item decodes`() throws {
+    let json = """
+    { "id": "d1", "type": "Deployment", "name": "redis", "tags": [],
+      "info": { "state": "running", "status": "Up 2h", "image": "redis:7", "server_id": "srv1" } }
+    """
+    let deployment = try decode(DeploymentListItem.self, json)
+    #expect(deployment.name == "redis")
+    #expect(deployment.state == .running)
+    #expect(deployment.info.image == "redis:7")
+    #expect(deployment.info.serverId == "srv1")
+}
+
+@Test func `deployments summary decodes`() throws {
+    let dep = try decode(
+        DeploymentsSummary.self,
+        "{\"total\":4,\"running\":3,\"stopped\":0,\"not_deployed\":1,\"unhealthy\":0,\"unknown\":0}",
+    )
+    #expect(dep.total == 4)
+    #expect(dep.notDeployed == 1)
+}
+
+// MARK: Alerts
+
+@Test func `severity level normalises and ranks`() throws {
+    #expect(try decode(SeverityLevel.self, "\"CRITICAL\"") == .critical)
+    #expect(try decode(SeverityLevel.self, "\"Warning\"") == .warning)
+    #expect(try decode(SeverityLevel.self, "\"ok\"") == .ok)
+    #expect(try decode(SeverityLevel.self, "\"NEW_LEVEL\"") == .unknown)
+    // Threshold logic relies on rank ordering; unknown ranks high so it isn't hidden.
+    #expect(SeverityLevel.critical.rank > SeverityLevel.warning.rank)
+    #expect(SeverityLevel.warning.rank > SeverityLevel.ok.rank)
+    #expect(SeverityLevel.unknown.rank >= SeverityLevel.warning.rank)
+}
+
+@Test func `alert item decodes id target and kind`() throws {
+    let json = """
+    { "_id": "alert123", "ts": 1735689600000, "level": "CRITICAL", "resolved": false,
+      "target": { "type": "Stack", "id": "s1" },
+      "data": { "type": "StackStateChange", "data": { "from": "running", "to": "down" } } }
+    """
+    let alert = try decode(AlertItem.self, json)
+    #expect(alert.id == "alert123")
+    #expect(alert.level == .critical)
+    #expect(alert.resolved == false)
+    #expect(alert.targetType == "Stack")
+    #expect(alert.targetId == "s1")
+    #expect(alert.kind == "StackStateChange")
+}
+
+@Test func `alert item tolerates oid object and missing data`() throws {
+    let json = """
+    { "_id": { "$oid": "abc" }, "ts": 1, "level": "WARNING", "resolved": true,
+      "target": { "type": "Server", "id": "srv1" } }
+    """
+    let alert = try decode(AlertItem.self, json)
+    #expect(alert.id == "abc")
+    #expect(alert.resolved == true)
+    #expect(alert.kind == nil)
+}
+
+@Test func `alerts page decodes and tolerates absent list`() throws {
+    let page = try decode(AlertsPage.self, "{ \"alerts\": [], \"next_page\": null }")
+    #expect(page.alerts.isEmpty)
+    let empty = try decode(AlertsPage.self, "{}")
+    #expect(empty.alerts.isEmpty)
+}
+
+// MARK: Procedures / Actions
+
+@Test func `exec resource decodes and maps state severity`() throws {
+    let json = """
+    { "id": "p1", "type": "Procedure", "name": "Nightly backup", "info": { "state": "Ok" } }
+    """
+    let item = try decode(ExecResourceItem.self, json)
+    #expect(item.name == "Nightly backup")
+    #expect(item.state == .ok)
+    #expect(ExecState.ok.severity == .healthy)
+    #expect(ExecState.failed.severity == .error)
+    #expect(ExecState.running.severity == .warning)
+    // Missing state tolerated → unknown.
+    let bare = try decode(ExecResourceItem.self, "{ \"id\": \"a1\", \"name\": \"x\", \"info\": {} }")
+    #expect(bare.state == .unknown)
+}
+
+// MARK: Per-server grouping
+
+@Test func `group stacks by server sorts and buckets unknown into Other`() throws {
+    func stack(_ id: String, _ server: String?) throws -> StackListItem {
+        let serverJSON = server.map { "\"server_id\": \"\($0)\"" } ?? "\"status\": \"x\""
+        return try decode(StackListItem.self, """
+        { "id": "\(id)", "name": "\(id)", "info": { "state": "running", \(serverJSON) } }
+        """)
+    }
+    let stacks = try [stack("a", "s2"), stack("b", "s1"), stack("c", nil), stack("d", "sX")]
+    let groups = makeStackGroups(stacks, serverNames: ["s1": "alpha", "s2": "beta"])
+    // alpha, beta sorted by name; everything else ("Other") last.
+    #expect(groups.map(\.serverName) == ["alpha", "beta", "Other"])
+    #expect(groups[0].stacks.map(\.id) == ["b"])
+    #expect(groups[2].stacks.map(\.id).sorted() == ["c", "d"]) // nil + unknown server id
+}
+
+// MARK: Updates / honest action tracking
+
+@Test func `komodo update only flags completed failures`() throws {
+    // Completed + failed → a real failure.
+    let failed = try decode(KomodoUpdate.self, "{ \"success\": false, \"status\": \"Complete\" }")
+    #expect(failed.completed)
+    #expect(!failed.success)
+    // In-progress + not-yet-successful is NOT a failure.
+    let running = try decode(KomodoUpdate.self, "{ \"success\": false, \"status\": \"InProgress\" }")
+    #expect(!running.completed)
+    // Absent success defaults to true so NoData responses don't fabricate failures.
+    let noData = try decode(KomodoUpdate.self, "{}")
+    #expect(noData.success)
+}
+
+@Test func `update list item decodes target and severity`() throws {
+    let json = """
+    { "id": "u1", "operation": "DeployStack", "success": false, "status": "Complete",
+      "start_ts": 1735689600000, "target": { "type": "Stack", "id": "s1" } }
+    """
+    let update = try decode(UpdateListItem.self, json)
+    #expect(update.operation == "DeployStack")
+    #expect(update.targetId == "s1")
+    #expect(update.severity == .error) // completed + failed
+    let ok = try decode(UpdateListItem.self, "{ \"id\": \"u2\", \"success\": true, \"start_ts\": 1 }")
+    #expect(ok.severity == .healthy)
 }
 
 // MARK: Credentials parsing

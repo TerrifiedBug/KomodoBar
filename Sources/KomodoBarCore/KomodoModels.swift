@@ -76,6 +76,18 @@ public enum StackState: String, Sendable, CaseIterable, Decodable {
         case .unknown: .unknown
         }
     }
+
+    /// Genuinely broken — drives the red attention count and the "Only problems"
+    /// filter. `down`/`stopped` are intentionally-off, not problems.
+    public var isProblem: Bool {
+        self == .unhealthy || self == .dead
+    }
+
+    /// Intentionally off (Komodo uses both `down` and `stopped`). Treated as one
+    /// "off" category for hiding and for the Show Hidden grouping.
+    public var isOff: Bool {
+        self == .down || self == .stopped
+    }
 }
 
 // MARK: - Stack display filter
@@ -85,8 +97,9 @@ public enum StackState: String, Sendable, CaseIterable, Decodable {
 /// and is unit-tested.
 public enum StackFilter: String, CaseIterable, Identifiable, Sendable {
     case all
-    case hideDown
+    case hideOff
     case runningOnly
+    case onlyProblems
 
     public var id: String {
         rawValue
@@ -95,17 +108,91 @@ public enum StackFilter: String, CaseIterable, Identifiable, Sendable {
     public var label: String {
         switch self {
         case .all: "All stacks"
-        case .hideDown: "Hide down stacks"
+        case .hideOff: "Hide off stacks"
         case .runningOnly: "Only running"
+        case .onlyProblems: "Only problems"
         }
     }
 
     public func includes(_ state: StackState) -> Bool {
         switch self {
         case .all: true
-        case .hideDown: state != .down
+        // Off = down or stopped; both are intentionally-off, so hide them together.
+        case .hideOff: !state.isOff
         case .runningOnly: state == .running
+        // Genuine problems only — matches the red-lizard definition, which treats
+        // `down`/`stopped` as intentionally-off (not a problem) and ignores them.
+        case .onlyProblems: state.isProblem
         }
+    }
+}
+
+// MARK: - Deployment state (single managed containers, distinct from Stacks)
+
+public enum DeploymentState: String, Sendable, CaseIterable, Decodable {
+    case deploying, running, created, restarting, stopping, removing
+    case paused, exited, dead, unhealthy, unknown
+    case notDeployed = "notdeployed"
+
+    public init(from decoder: any Decoder) throws {
+        let raw = (try? decoder.singleValueContainer().decode(String.self)) ?? ""
+        let key = raw.replacingOccurrences(of: "-", with: "").replacingOccurrences(of: "_", with: "").lowercased()
+        self = DeploymentState.allCases.first { $0.rawValue == key } ?? .unknown
+    }
+
+    public var displayName: String {
+        switch self {
+        case .notDeployed: "Not deployed"
+        default: rawValue.capitalized
+        }
+    }
+
+    public var severity: HealthSeverity {
+        switch self {
+        case .running: .healthy
+        case .dead, .unhealthy: .error
+        case .deploying, .created, .restarting, .stopping, .removing, .paused, .exited, .notDeployed: .warning
+        case .unknown: .unknown
+        }
+    }
+}
+
+// MARK: - Procedures / Actions (runnable automations)
+
+/// Last-run state of a Procedure or Action.
+public enum ExecState: String, Sendable, CaseIterable, Decodable {
+    case ok, running, failed, unknown
+
+    public init(from decoder: any Decoder) throws {
+        let raw = (try? decoder.singleValueContainer().decode(String.self)) ?? ""
+        self = ExecState(rawValue: raw.lowercased()) ?? .unknown
+    }
+
+    public var severity: HealthSeverity {
+        switch self {
+        case .ok: .healthy
+        case .running: .warning
+        case .failed: .error
+        case .unknown: .unknown
+        }
+    }
+}
+
+/// A runnable Procedure or Action (same list shape). `id` runs it; `state` gives a
+/// leading ok/running/failed dot.
+public struct ExecResourceItem: Decodable, Sendable, Identifiable {
+    public let id: String
+    public let name: String
+    public let state: ExecState
+
+    enum CodingKeys: String, CodingKey { case id, name, info }
+    private struct Info: Decodable { let state: ExecState? }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = (try? c.decode(String.self, forKey: .id)) ?? ""
+        self.name = (try? c.decode(String.self, forKey: .name)) ?? ""
+        self.state = (try? c.decode(Info.self, forKey: .info))?.state ?? .unknown
     }
 }
 
@@ -158,6 +245,30 @@ public struct StacksSummary: Decodable, Sendable {
         }
         self.total = n(.total); self.running = n(.running); self.stopped = n(.stopped)
         self.down = n(.down); self.unhealthy = n(.unhealthy); self.unknown = n(.unknown)
+    }
+}
+
+public struct DeploymentsSummary: Decodable, Sendable {
+    public let total: Int
+    public let running: Int
+    public let stopped: Int
+    public let notDeployed: Int
+    public let unhealthy: Int
+    public let unknown: Int
+
+    public var needsAttention: Int {
+        self.unhealthy
+    }
+
+    enum CodingKeys: String, CodingKey { case total, running, stopped, notDeployed, unhealthy, unknown }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        func n(_ key: CodingKeys) -> Int {
+            (try? c.decodeIfPresent(Int.self, forKey: key)) ?? 0
+        }
+        self.total = n(.total); self.running = n(.running); self.stopped = n(.stopped)
+        self.notDeployed = n(.notDeployed); self.unhealthy = n(.unhealthy); self.unknown = n(.unknown)
     }
 }
 
@@ -227,6 +338,57 @@ public struct StackListItem: Decodable, Sendable, Identifiable {
     /// Names of services with a pending image update.
     public var servicesWithUpdate: [String] {
         self.info.services?.filter(\.updateAvailable).map(\.service) ?? []
+    }
+}
+
+public struct DeploymentListItem: Decodable, Sendable, Identifiable {
+    public let id: String
+    public let name: String
+    public let info: Info
+
+    public struct Info: Decodable, Sendable {
+        public let state: DeploymentState
+        public let status: String?
+        public let image: String?
+        public let serverId: String?
+    }
+
+    public var state: DeploymentState {
+        self.info.state
+    }
+}
+
+// MARK: - Per-server grouping (display)
+
+/// A server's stacks, for the "Group stacks by server" menu layout.
+public struct StackGroup: Sendable, Identifiable {
+    public let serverId: String?
+    public let serverName: String
+    public let stacks: [StackListItem]
+
+    public var id: String {
+        self.serverId ?? "—"
+    }
+}
+
+/// Group stacks by their server, resolving names from `serverNames`. Stacks with
+/// no/unknown server fall into a trailing "Other" group. Groups are sorted by
+/// name; stack order within each group is preserved.
+public func makeStackGroups(_ stacks: [StackListItem], serverNames: [String: String]) -> [StackGroup] {
+    var byServer: [String?: [StackListItem]] = [:]
+    for stack in stacks {
+        // Collapse a missing OR unknown server id into one "Other" bucket (nil key),
+        // so a stack on a since-removed server doesn't spawn its own lone group.
+        let key = stack.info.serverId.flatMap { serverNames[$0] != nil ? $0 : nil }
+        byServer[key, default: []].append(stack)
+    }
+    let groups = byServer.map { id, list in
+        StackGroup(serverId: id, serverName: id.flatMap { serverNames[$0] } ?? "Other", stacks: list)
+    }
+    return groups.sorted { a, b in
+        if a.serverName == "Other" { return false }
+        if b.serverName == "Other" { return true }
+        return a.serverName.localizedCaseInsensitiveCompare(b.serverName) == .orderedAscending
     }
 }
 

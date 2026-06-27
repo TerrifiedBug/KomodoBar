@@ -19,6 +19,10 @@ private struct ConnectionSettingsView: View {
     @State private var apiSecret = CredentialStore.apiSecret
     @State private var pollInterval = KomodoStore.shared.pollInterval
     @State private var stackFilter = KomodoStore.shared.stackFilter
+    @State private var groupByServer = KomodoStore.shared.groupStacksByServer
+    @State private var hideOffStacks = KomodoStore.shared.hideOffStacks
+    @State private var notificationsEnabled = KomodoStore.shared.notificationsEnabled
+    @State private var notifyThreshold = KomodoStore.shared.notifyThreshold
 
     @State private var testing = false
     @State private var testResult: String?
@@ -62,11 +66,43 @@ private struct ConnectionSettingsView: View {
                 .onChange(of: self.stackFilter) { _, newValue in
                     KomodoStore.shared.stackFilter = newValue
                 }
+                Toggle("Group stacks by server", isOn: self.$groupByServer)
+                    .onChange(of: self.groupByServer) { _, newValue in
+                        KomodoStore.shared.groupStacksByServer = newValue
+                    }
+                Toggle("Always hide off stacks (down + stopped)", isOn: self.$hideOffStacks)
+                    .onChange(of: self.hideOffStacks) { _, newValue in
+                        KomodoStore.shared.hideOffStacks = newValue
+                    }
             } header: {
                 Text("Display")
             } footer: {
                 Text(
                     "Down stacks are often intentionally off — hide them to cut menu clutter. Pending updates are always shown.",
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Toggle("Notify on new alerts", isOn: self.$notificationsEnabled)
+                    .onChange(of: self.notificationsEnabled) { _, newValue in
+                        KomodoStore.shared.notificationsEnabled = newValue
+                    }
+                Picker("Notify for", selection: self.$notifyThreshold) {
+                    Text("All alerts").tag(SeverityLevel.ok)
+                    Text("Warning and above").tag(SeverityLevel.warning)
+                    Text("Critical only").tag(SeverityLevel.critical)
+                }
+                .disabled(!self.notificationsEnabled)
+                .onChange(of: self.notifyThreshold) { _, newValue in
+                    KomodoStore.shared.notifyThreshold = newValue
+                }
+            } header: {
+                Text("Notifications")
+            } footer: {
+                Text(
+                    "Posts a macOS notification when Komodo raises a new alert (e.g. a stack goes down). Acknowledge alerts from the menu.",
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)

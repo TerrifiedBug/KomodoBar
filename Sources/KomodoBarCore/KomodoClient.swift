@@ -96,9 +96,39 @@ public struct KomodoClient: Sendable {
         try await self.read("ListStacks")
     }
 
+    public func listDeployments() async throws -> [DeploymentListItem] {
+        try await self.read("ListDeployments")
+    }
+
+    public func deploymentsSummary() async throws -> DeploymentsSummary {
+        try await self.read("GetDeploymentsSummary")
+    }
+
+    public func listProcedures() async throws -> [ExecResourceItem] {
+        try await self.read("ListProcedures")
+    }
+
+    public func listActions() async throws -> [ExecResourceItem] {
+        try await self.read("ListActions")
+    }
+
+    /// The latest page of the operation history (newest first).
+    public func listUpdates() async throws -> [UpdateListItem] {
+        let page: UpdatesPage = try await self.call("read", "ListUpdates", [:])
+        return page.updates
+    }
+
     /// Realtime CPU/mem/disk for one server. Served from Core's in-memory cache.
     public func systemStats(server idOrName: String) async throws -> SystemStats {
         try await self.call("read", "GetSystemStats", ["server": idOrName])
+    }
+
+    /// Open (unresolved) alerts, newest first as returned by Core. Pass
+    /// `unresolvedOnly: false` to include resolved history.
+    public func listAlerts(unresolvedOnly: Bool = true) async throws -> [AlertItem] {
+        let query: [String: Any] = unresolvedOnly ? ["resolved": false] : [:]
+        let page: AlertsPage = try await self.call("read", "ListAlerts", ["query": query])
+        return page.alerts
     }
 
     // MARK: Writes
@@ -109,10 +139,27 @@ public struct KomodoClient: Sendable {
         try await self.call("write", "CheckStackForUpdate", ["stack": idOrName, "skip_auto_update": true])
     }
 
+    /// Mark an alert resolved (acknowledged) by its id.
+    public func closeAlert(_ id: String) async throws {
+        _ = try await self.perform("write", "CloseAlert", ["id": id])
+    }
+
     // MARK: Executes (fire-and-refresh)
 
     public func deployStack(_ idOrName: String) async throws {
         try await self.fire("DeployStack", ["stack": idOrName])
+    }
+
+    /// Deploy a stack only if its compose/image content changed since last deploy —
+    /// a no-op (no downtime) for unchanged stacks. The safe way to apply updates.
+    public func deployStackIfChanged(_ idOrName: String) async throws {
+        try await self.fire("DeployStackIfChanged", ["stack": idOrName])
+    }
+
+    /// Deploy every stack matching a pattern, but only those whose content changed.
+    /// `"*"` = all stacks; unchanged ones are skipped server-side (no downtime).
+    public func batchDeployStackIfChanged(pattern: String = "*") async throws {
+        try await self.fire("BatchDeployStackIfChanged", ["pattern": pattern])
     }
 
     public func pullStack(_ idOrName: String) async throws {
@@ -128,6 +175,32 @@ public struct KomodoClient: Sendable {
         try await self.fire("BatchDeployStack", ["pattern": pattern])
     }
 
+    // Deployment actions (single managed containers). All take the `deployment` param.
+
+    public func deployDeployment(_ idOrName: String) async throws {
+        try await self.fire("Deploy", ["deployment": idOrName])
+    }
+
+    public func startDeployment(_ idOrName: String) async throws {
+        try await self.fire("StartDeployment", ["deployment": idOrName])
+    }
+
+    public func stopDeployment(_ idOrName: String) async throws {
+        try await self.fire("StopDeployment", ["deployment": idOrName])
+    }
+
+    public func restartDeployment(_ idOrName: String) async throws {
+        try await self.fire("RestartDeployment", ["deployment": idOrName])
+    }
+
+    public func runProcedure(_ idOrName: String) async throws {
+        try await self.fire("RunProcedure", ["procedure": idOrName])
+    }
+
+    public func runAction(_ idOrName: String) async throws {
+        try await self.fire("RunAction", ["action": idOrName])
+    }
+
     /// Admin-only global poll for updates on poll/auto-update-enabled resources.
     /// `skipAutoUpdate: true` only raises UpdateAvailable alerts instead of deploying.
     public func globalAutoUpdate(skipAutoUpdate: Bool) async throws {
@@ -141,7 +214,16 @@ public struct KomodoClient: Sendable {
     }
 
     private func fire(_ name: String, _ body: [String: Any]) async throws {
-        _ = try await self.perform("execute", name, body)
+        let data = try await self.perform("execute", name, body)
+        // Komodo returns the resulting Update on a 200 even when the operation itself
+        // failed. Surface a *completed* failure as an error so the UI stops claiming
+        // success on a 200 that actually failed. Batch responses are arrays and won't
+        // decode here, so they're left to their own (future) handling.
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        if let update = try? decoder.decode(KomodoUpdate.self, from: data), update.completed, !update.success {
+            throw KomodoError(status: 0, message: "Komodo reported the operation failed")
+        }
     }
 
     private func call<T: Decodable>(_ group: String, _ name: String, _ body: [String: Any]) async throws -> T {
