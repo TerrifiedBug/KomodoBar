@@ -17,11 +17,14 @@ Destructive actions (redeploy / restart) ask for confirmation first.
 ## Install
 
 ```bash
-brew install --cask komodobar
+brew install --cask --no-quarantine terrifiedbug/tap/komodobar
 ```
 
-Or download the latest build from [Releases](https://github.com/TerrifiedBug/KomodoBar/releases).
-It's unsigned, so on first launch right-click the app → **Open** (or `xattr -dr com.apple.quarantine KomodoBar.app`).
+`--no-quarantine` is needed because the build is unsigned (free); without it Gatekeeper blocks the app.
+
+Or download the latest build from [Releases](https://github.com/TerrifiedBug/KomodoBar/releases),
+then right-click the app → **Open** (or `xattr -dr com.apple.quarantine KomodoBar.app`).
+KomodoBar auto-updates itself via Sparkle for direct downloads; `brew upgrade` updates cask installs.
 
 ## Connect
 
