@@ -1,0 +1,26 @@
+# SwiftLint configuration for KomodoBar.
+strict: true
+analyzer_rules:
+  - unused_declaration
+  - unused_import
+opt_in_rules:
+  - empty_count
+  - first_where
+  - sorted_first_last
+  - contains_over_first_not_nil
+  - last_where
+disabled_rules:
+  - todo
+excluded:
+  - .build
+  - build
+line_length:
+  warning: 140
+  error: 200
+file_length:
+  warning: 600
+  error: 1000
+type_body_length:
+  warning: 400
+  error: 600
+reporter: "xcode"

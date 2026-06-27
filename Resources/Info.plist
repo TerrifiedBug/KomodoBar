@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>KomodoBar</string>
+    <key>CFBundleDisplayName</key>
+    <string>KomodoBar</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.komodobar.app</string>
+    <key>CFBundleExecutable</key>
+    <string>KomodoBar</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleIconFile</key>
+    <string>Icon</string>
+    <!-- __MARKETING_VERSION__ / __BUILD_NUMBER__ are filled by Scripts/package_app.sh from version.env. -->
+    <key>CFBundleShortVersionString</key>
+    <string>__MARKETING_VERSION__</string>
+    <key>CFBundleVersion</key>
+    <string>__BUILD_NUMBER__</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>15.0</string>
+    <key>LSUIElement</key>
+    <true/>
+    <key>NSHumanReadableCopyright</key>
+    <string>© 2026 Danny Feates. MIT License.</string>
+    <key>SUFeedURL</key>
+    <string>https://raw.githubusercontent.com/TerrifiedBug/KomodoBar/main/appcast.xml</string>
+    <key>SUPublicEDKey</key>
+    <string>REPLACE_WITH_YOUR_SPARKLE_ED_PUBLIC_KEY</string>
+    <key>SUEnableAutomaticChecks</key>
+    <true/>
+</dict>
+</plist>

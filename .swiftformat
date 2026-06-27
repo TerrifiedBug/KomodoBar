@@ -1,0 +1,10 @@
+# SwiftFormat configuration for KomodoBar.
+--swiftversion 6.2
+--maxwidth 120
+--indent 4
+--self insert
+--extensionacl on-declarations
+--wraparguments before-first
+--wrapparameters before-first
+--organizetypes class,struct,enum,extension
+--exclude .build,build
