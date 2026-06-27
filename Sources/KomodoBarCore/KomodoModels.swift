@@ -326,6 +326,40 @@ public struct DeploymentListItem: Decodable, Sendable, Identifiable {
     }
 }
 
+// MARK: - Per-server grouping (display)
+
+/// A server's stacks, for the "Group stacks by server" menu layout.
+public struct StackGroup: Sendable, Identifiable {
+    public let serverId: String?
+    public let serverName: String
+    public let stacks: [StackListItem]
+
+    public var id: String {
+        self.serverId ?? "—"
+    }
+}
+
+/// Group stacks by their server, resolving names from `serverNames`. Stacks with
+/// no/unknown server fall into a trailing "Other" group. Groups are sorted by
+/// name; stack order within each group is preserved.
+public func makeStackGroups(_ stacks: [StackListItem], serverNames: [String: String]) -> [StackGroup] {
+    var byServer: [String?: [StackListItem]] = [:]
+    for stack in stacks {
+        // Collapse a missing OR unknown server id into one "Other" bucket (nil key),
+        // so a stack on a since-removed server doesn't spawn its own lone group.
+        let key = stack.info.serverId.flatMap { serverNames[$0] != nil ? $0 : nil }
+        byServer[key, default: []].append(stack)
+    }
+    let groups = byServer.map { id, list in
+        StackGroup(serverId: id, serverName: id.flatMap { serverNames[$0] } ?? "Other", stacks: list)
+    }
+    return groups.sorted { a, b in
+        if a.serverName == "Other" { return false }
+        if b.serverName == "Other" { return true }
+        return a.serverName.localizedCaseInsensitiveCompare(b.serverName) == .orderedAscending
+    }
+}
+
 // MARK: - System stats (GetSystemStats)
 
 public struct SystemStats: Decodable, Sendable {

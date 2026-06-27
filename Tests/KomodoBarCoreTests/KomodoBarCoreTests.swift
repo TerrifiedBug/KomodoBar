@@ -221,6 +221,23 @@ private func decode<T: Decodable>(_: T.Type, _ json: String) throws -> T {
     #expect(empty.alerts.isEmpty)
 }
 
+// MARK: Per-server grouping
+
+@Test func `group stacks by server sorts and buckets unknown into Other`() throws {
+    func stack(_ id: String, _ server: String?) throws -> StackListItem {
+        let serverJSON = server.map { "\"server_id\": \"\($0)\"" } ?? "\"status\": \"x\""
+        return try decode(StackListItem.self, """
+        { "id": "\(id)", "name": "\(id)", "info": { "state": "running", \(serverJSON) } }
+        """)
+    }
+    let stacks = try [stack("a", "s2"), stack("b", "s1"), stack("c", nil), stack("d", "sX")]
+    let groups = makeStackGroups(stacks, serverNames: ["s1": "alpha", "s2": "beta"])
+    // alpha, beta sorted by name; everything else ("Other") last.
+    #expect(groups.map(\.serverName) == ["alpha", "beta", "Other"])
+    #expect(groups[0].stacks.map(\.id) == ["b"])
+    #expect(groups[2].stacks.map(\.id).sorted() == ["c", "d"]) // nil + unknown server id
+}
+
 // MARK: Credentials parsing
 
 @Test func `credentials reject invalid UR ls`() {
