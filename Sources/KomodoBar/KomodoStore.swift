@@ -80,7 +80,7 @@ final class KomodoStore {
     /// Stacks worth a red alert: genuinely broken (unhealthy/dead) and not muted or
     /// snoozed. Excludes `down` — that's intentionally-off, not a problem.
     var attentionStacks: [StackListItem] {
-        self.stacks.filter { ($0.state == .unhealthy || $0.state == .dead) && !self.isSuppressed($0.id) }
+        self.stacks.filter { $0.state.isProblem && !self.isSuppressed($0.id) }
     }
 
     var attentionServers: [ServerListItem] {
@@ -135,7 +135,7 @@ final class KomodoStore {
 
     /// Menu filter for the stack list (display-only; persisted).
     var stackFilter: StackFilter {
-        get { StackFilter(rawValue: UserDefaults.standard.string(forKey: "komodo.stackFilter") ?? "") ?? .hideDown }
+        get { StackFilter(rawValue: UserDefaults.standard.string(forKey: "komodo.stackFilter") ?? "") ?? .hideOff }
         set { UserDefaults.standard.set(newValue.rawValue, forKey: "komodo.stackFilter"); self.notify() }
     }
 
@@ -146,15 +146,16 @@ final class KomodoStore {
         set { UserDefaults.standard.set(newValue, forKey: "komodo.groupByServer"); self.notify() }
     }
 
-    /// Hide `stopped` stacks from the menu entirely (visible and hidden). Persisted.
-    var excludeStopped: Bool {
-        get { UserDefaults.standard.bool(forKey: "komodo.excludeStopped") }
-        set { UserDefaults.standard.set(newValue, forKey: "komodo.excludeStopped"); self.notify() }
+    /// Hide "off" stacks (Komodo's `down` + `stopped`) from the menu entirely —
+    /// visible and hidden. Persisted.
+    var hideOffStacks: Bool {
+        get { UserDefaults.standard.bool(forKey: "komodo.hideOff") }
+        set { UserDefaults.standard.set(newValue, forKey: "komodo.hideOff"); self.notify() }
     }
 
-    /// Stacks eligible for display, after the global `excludeStopped` rule.
+    /// Stacks eligible for display, after the global `hideOffStacks` rule.
     private var displayStacks: [StackListItem] {
-        self.excludeStopped ? self.stacks.filter { $0.state != .stopped } : self.stacks
+        self.hideOffStacks ? self.stacks.filter { !$0.state.isOff } : self.stacks
     }
 
     /// Stacks shown in the menu after applying `stackFilter`.
@@ -162,10 +163,12 @@ final class KomodoStore {
         self.displayStacks.filter { self.stackFilter.includes($0.state) }
     }
 
-    /// Visible stacks grouped by server, for the grouped menu layout.
-    var visibleStackGroups: [StackGroup] {
+    /// Stacks grouped by server for the grouped layout. Groups hold the server's
+    /// FULL display-stack set (so the rollup badge reflects true health); the menu
+    /// applies `stackFilter` to decide which rows to list within each group.
+    var stackGroups: [StackGroup] {
         let names = Dictionary(servers.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
-        return makeStackGroups(self.visibleStacks, serverNames: names)
+        return makeStackGroups(self.displayStacks, serverNames: names)
     }
 
     /// Stacks the current filter is hiding — surfaced under "Show N hidden" so the

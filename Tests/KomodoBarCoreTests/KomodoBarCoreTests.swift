@@ -107,12 +107,23 @@ private func decode<T: Decodable>(_: T.Type, _ json: String) throws -> T {
 
 // MARK: Stack filter
 
-@Test func `stack filter hide down hides only down`() {
-    let filter = StackFilter.hideDown
+@Test func `stack filter hide off hides down and stopped`() {
+    let filter = StackFilter.hideOff
     #expect(filter.includes(.running))
-    #expect(filter.includes(.stopped)) // stopped stays — it's not "down"
     #expect(filter.includes(.unhealthy))
-    #expect(!filter.includes(.down))
+    #expect(!filter.includes(.down)) // off
+    #expect(!filter.includes(.stopped)) // off
+}
+
+@Test func `stack state off and problem helpers`() {
+    #expect(StackState.down.isOff)
+    #expect(StackState.stopped.isOff)
+    #expect(!StackState.running.isOff)
+    #expect(!StackState.unhealthy.isOff)
+    #expect(StackState.unhealthy.isProblem)
+    #expect(StackState.dead.isProblem)
+    #expect(!StackState.down.isProblem) // off, not a problem
+    #expect(!StackState.running.isProblem)
 }
 
 @Test func `stack filter running only`() {

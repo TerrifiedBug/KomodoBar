@@ -76,6 +76,18 @@ public enum StackState: String, Sendable, CaseIterable, Decodable {
         case .unknown: .unknown
         }
     }
+
+    /// Genuinely broken — drives the red attention count and the "Only problems"
+    /// filter. `down`/`stopped` are intentionally-off, not problems.
+    public var isProblem: Bool {
+        self == .unhealthy || self == .dead
+    }
+
+    /// Intentionally off (Komodo uses both `down` and `stopped`). Treated as one
+    /// "off" category for hiding and for the Show Hidden grouping.
+    public var isOff: Bool {
+        self == .down || self == .stopped
+    }
 }
 
 // MARK: - Stack display filter
@@ -85,7 +97,7 @@ public enum StackState: String, Sendable, CaseIterable, Decodable {
 /// and is unit-tested.
 public enum StackFilter: String, CaseIterable, Identifiable, Sendable {
     case all
-    case hideDown
+    case hideOff
     case runningOnly
     case onlyProblems
 
@@ -96,7 +108,7 @@ public enum StackFilter: String, CaseIterable, Identifiable, Sendable {
     public var label: String {
         switch self {
         case .all: "All stacks"
-        case .hideDown: "Hide down stacks"
+        case .hideOff: "Hide off stacks"
         case .runningOnly: "Only running"
         case .onlyProblems: "Only problems"
         }
@@ -105,11 +117,12 @@ public enum StackFilter: String, CaseIterable, Identifiable, Sendable {
     public func includes(_ state: StackState) -> Bool {
         switch self {
         case .all: true
-        case .hideDown: state != .down
+        // Off = down or stopped; both are intentionally-off, so hide them together.
+        case .hideOff: !state.isOff
         case .runningOnly: state == .running
         // Genuine problems only — matches the red-lizard definition, which treats
-        // `down` as intentionally-off (not a problem) and ignores it.
-        case .onlyProblems: state == .unhealthy || state == .dead
+        // `down`/`stopped` as intentionally-off (not a problem) and ignores them.
+        case .onlyProblems: state.isProblem
         }
     }
 }

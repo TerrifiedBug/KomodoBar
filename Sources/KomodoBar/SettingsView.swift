@@ -20,7 +20,7 @@ private struct ConnectionSettingsView: View {
     @State private var pollInterval = KomodoStore.shared.pollInterval
     @State private var stackFilter = KomodoStore.shared.stackFilter
     @State private var groupByServer = KomodoStore.shared.groupStacksByServer
-    @State private var excludeStopped = KomodoStore.shared.excludeStopped
+    @State private var hideOffStacks = KomodoStore.shared.hideOffStacks
     @State private var notificationsEnabled = KomodoStore.shared.notificationsEnabled
     @State private var notifyThreshold = KomodoStore.shared.notifyThreshold
 
@@ -70,9 +70,9 @@ private struct ConnectionSettingsView: View {
                     .onChange(of: self.groupByServer) { _, newValue in
                         KomodoStore.shared.groupStacksByServer = newValue
                     }
-                Toggle("Always hide stopped stacks", isOn: self.$excludeStopped)
-                    .onChange(of: self.excludeStopped) { _, newValue in
-                        KomodoStore.shared.excludeStopped = newValue
+                Toggle("Always hide off stacks (down + stopped)", isOn: self.$hideOffStacks)
+                    .onChange(of: self.hideOffStacks) { _, newValue in
+                        KomodoStore.shared.hideOffStacks = newValue
                     }
             } header: {
                 Text("Display")

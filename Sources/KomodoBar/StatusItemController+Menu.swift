@@ -118,7 +118,7 @@ extension StatusItemController {
         if visible.isEmpty {
             self.addInfo(to: menu, self.emptyStacksMessage(), secondary: true)
         } else if self.store.groupStacksByServer {
-            for group in self.store.visibleStackGroups {
+            for group in self.store.stackGroups {
                 self.addStackGroup(group, to: menu)
             }
         } else {
@@ -134,8 +134,8 @@ extension StatusItemController {
         }
     }
 
-    /// "Show N hidden" — hidden non-running stacks (down/stopped/…) listed directly so
-    /// problems surface, with the healthy/running ones tucked under a nested submenu.
+    /// "Show N hidden" — problems/transient stacks listed directly so they surface,
+    /// with the benign "Off" (down/stopped) and "Running" buckets nested.
     private func addHiddenSection(to menu: NSMenu) {
         let parent = NSMenuItem()
         parent.title = "Show \(self.store.hiddenStackCount) hidden"
@@ -148,12 +148,13 @@ extension StatusItemController {
         )
         let sub = NSMenu()
         let hidden = self.store.hiddenStacks
-        // Problems (down/dead/unhealthy/…) listed directly; the benign buckets —
-        // stopped and running — collapse into their own nested submenus.
-        for stack in hidden where stack.state != .running && stack.state != .stopped {
+        // Anything that's neither off nor running (problems + transient states) is
+        // listed directly; the benign buckets — off (down/stopped) and running —
+        // collapse into nested submenus so they don't bury the noteworthy ones.
+        for stack in hidden where !stack.state.isOff && stack.state != .running {
             self.addStackRow(stack, to: sub)
         }
-        self.addNestedStackGroup("Stopped", .warning, hidden.filter { $0.state == .stopped }, to: sub)
+        self.addNestedStackGroup("Off", .warning, hidden.filter(\.state.isOff), to: sub)
         self.addNestedStackGroup("Running", .healthy, hidden.filter { $0.state == .running }, to: sub)
         parent.submenu = sub
         menu.addItem(parent)
@@ -212,14 +213,20 @@ extension StatusItemController {
         menu.addItem(parent)
     }
 
-    /// A per-server group header with a rollup badge, stacks nested in its submenu.
+    /// A per-server group header with a rollup badge over the server's FULL stack set,
+    /// nesting only the rows that pass the active filter. Skipped if nothing passes.
     private func addStackGroup(_ group: StackGroup, to menu: NSMenu) {
+        let rows = group.stacks.filter { self.store.stackFilter.includes($0.state) }
+        guard !rows.isEmpty else { return }
+
+        // Badge + dot reflect the server's true health (all its stacks), not the
+        // filtered subset, so a filter can't make a busy server read as empty.
         let running = group.stacks.count(where: { $0.state == .running })
         let updates = group.stacks.filter(\.updateAvailable).count
         var badge = "\(running)/\(group.stacks.count)"
         if updates > 0 { badge += " ⬆\(updates)" }
 
-        let severity: HealthSeverity = if group.stacks.contains(where: { $0.state.severity == .error }) {
+        let severity: HealthSeverity = if group.stacks.contains(where: \.state.isProblem) {
             .error
         } else if group.stacks.allSatisfy({ $0.state == .running }) {
             .healthy
@@ -242,7 +249,7 @@ extension StatusItemController {
             sub.addItem(batch)
             sub.addItem(.separator())
         }
-        for stack in group.stacks {
+        for stack in rows {
             self.addStackRow(stack, to: sub)
         }
         parent.submenu = sub

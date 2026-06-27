@@ -82,12 +82,12 @@ extension KomodoStore {
     // MARK: Batch actions
 
     func checkAllForUpdates() {
-        self.runBatch("Check all stacks", self.stacks.map(\.id)) { try await $0.checkStackForUpdate($1) }
+        self.runBatch("Check all stacks", self.stacks.map(\.id)) { _ = try await $0.checkStackForUpdate($1) }
     }
 
     /// Stacks genuinely broken right now — the targets for "Redeploy unhealthy".
     var unhealthyStacks: [StackListItem] {
-        self.stacks.filter { $0.state == .unhealthy || $0.state == .dead }
+        self.stacks.filter(\.state.isProblem)
     }
 
     func redeployUnhealthy() {

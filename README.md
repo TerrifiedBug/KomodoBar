@@ -8,7 +8,7 @@ Glance at your Komodo fleet from the menu bar and act on it without opening the 
 
 - **Server, stack & deployment health** — per-resource state with fleet rollups, with Deployments support for container-only setups.
 - **Find & focus** — type to jump to a resource by name; pin (★) or auto-surface recently-used stacks in a Quick Access section; optionally group stacks by server.
-- **Filters** — hide intentionally-down stacks, show only problems, and still reach hidden ones via "Show N hidden".
+- **Filters** — hide "off" stacks (down + stopped), show only problems, and still reach hidden ones (grouped Off / Running) via "Show N hidden".
 - **Updates** — pending image updates are badged ⬆; "Update All" applies them with deploy-if-changed (unchanged stacks keep running).
 - **Actions** — update / redeploy / pull / restart per stack; deploy / start / stop / restart per deployment; "Redeploy N Unhealthy", "Redeploy all on <server>", and "Redeploy All". Run your Komodo Procedures & Actions from the menu.
 - **Notifications** — get a macOS notification when Komodo raises a new alert (with a severity threshold); acknowledge alerts from the menu.
