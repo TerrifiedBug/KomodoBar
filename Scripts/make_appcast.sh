@@ -33,10 +33,19 @@ if [[ -z "$PREFIX" ]]; then
     PREFIX="https://github.com/$SLUG/releases/download/v$MARKETING_VERSION/"
 fi
 
+GEN_ARGS=("$ROOT/build" -o "$ROOT/appcast.xml")
 if [[ -n "$PREFIX" ]]; then
-  "$GEN" "$ROOT/build" -o "$ROOT/appcast.xml" --download-url-prefix "$PREFIX"
+  GEN_ARGS+=(--download-url-prefix "$PREFIX")
 else
   echo "==> note: no git remote/version; appcast URLs are relative. Set DOWNLOAD_URL_PREFIX." >&2
-  "$GEN" "$ROOT/build" -o "$ROOT/appcast.xml"
+fi
+
+# Sign with the Keychain key locally, or a private key piped from
+# $SPARKLE_PRIVATE_KEY (set that as a CI secret for headless releases — no
+# Keychain needed).
+if [[ -n "${SPARKLE_PRIVATE_KEY:-}" ]]; then
+  printf '%s' "$SPARKLE_PRIVATE_KEY" | "$GEN" "${GEN_ARGS[@]}" --ed-key-file -
+else
+  "$GEN" "${GEN_ARGS[@]}"
 fi
 echo "wrote $ROOT/appcast.xml"

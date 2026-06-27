@@ -1,0 +1,89 @@
+name: Release
+
+# Tag-triggered UNSIGNED release: builds the universal .app + zip, EdDSA-signs the
+# Sparkle appcast, publishes a GitHub Release, and (optionally) updates the Homebrew
+# cask. Trigger with: `git tag vX.Y.Z && git push origin vX.Y.Z`.
+#
+# Required secret:
+#   SPARKLE_PRIVATE_KEY  EdDSA private key. Export once with:
+#                        `generate_keys -x key.txt` (Sparkle tool) → paste the contents.
+# Optional cask publish (to the shared tap) — set BOTH:
+#   variable HOMEBREW_TAP_REPO   TerrifiedBug/homebrew-tap
+#   secret   HOMEBREW_TAP_TOKEN  a PAT with WRITE access to TerrifiedBug/homebrew-tap
+#                                (a token scoped to a different repo fails — that exact
+#                                gap silently broke TickerBar's release).
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history → correct git-commit-count build number
+
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Set version from tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          sed -i '' "s/^MARKETING_VERSION=.*/MARKETING_VERSION=$VERSION/" version.env
+
+      - name: Build unsigned release + signed appcast
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: make release-unsigned
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/KomodoBar-*.zip
+
+      - name: Commit appcast.xml + version
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add appcast.xml version.env
+          git commit -m "Release ${GITHUB_REF_NAME}" || echo "nothing to commit"
+          git push origin "HEAD:${{ github.event.repository.default_branch }}"
+
+      - name: Update Homebrew cask (optional)
+        if: ${{ vars.HOMEBREW_TAP_REPO != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          ZIP="build/KomodoBar-$VERSION.zip"
+          SHA="$(shasum -a 256 "$ZIP" | awk '{print $1}')"
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/${{ vars.HOMEBREW_TAP_REPO }}.git" tap
+          mkdir -p tap/Casks
+          cat > "tap/Casks/komodobar.rb" <<CASK
+          cask "komodobar" do
+            version "$VERSION"
+            sha256 "$SHA"
+
+            url "https://github.com/TerrifiedBug/KomodoBar/releases/download/v#{version}/KomodoBar-#{version}.zip"
+            name "KomodoBar"
+            desc "Menu-bar control plane for Komodo"
+            homepage "https://github.com/TerrifiedBug/KomodoBar"
+
+            # Unsigned build: after install, clear quarantine with
+            # \`xattr -dr com.apple.quarantine /Applications/KomodoBar.app\`.
+            auto_updates true
+            app "KomodoBar.app"
+          end
+          CASK
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "Casks/komodobar.rb"
+          git commit -m "komodobar $VERSION" || echo "nothing to commit"
+          git push
