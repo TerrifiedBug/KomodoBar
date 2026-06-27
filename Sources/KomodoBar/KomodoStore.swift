@@ -47,6 +47,10 @@ final class KomodoStore {
     private(set) var deploymentsSummary: DeploymentsSummary?
     private(set) var containersSummary: DockerContainersSummary?
 
+    /// Runnable Komodo Procedures and Actions, for the Run launcher.
+    private(set) var procedures: [ExecResourceItem] = []
+    private(set) var actions: [ExecResourceItem] = []
+
     /// Called after any state change so the status-bar icon can repaint.
     var onChange: (@MainActor () -> Void)?
 
@@ -282,6 +286,7 @@ final class KomodoStore {
             self.servers = []; self.stacks = []; self.serversSummary = nil; self.stacksSummary = nil
             self.alerts = []
             self.deployments = []; self.deploymentsSummary = nil; self.containersSummary = nil
+            self.procedures = []; self.actions = []
         }
         self.notify()
         self.restartPolling()
@@ -335,10 +340,16 @@ final class KomodoStore {
             async let dep = client.listDeployments()
             async let depSum = client.deploymentsSummary()
             async let conSum = client.dockerContainersSummary()
+            async let procs = client.listProcedures()
+            async let acts = client.listActions()
             self.deployments = await ((try? dep) ?? [])
                 .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
             self.deploymentsSummary = try? await depSum
             self.containersSummary = try? await conSum
+            self.procedures = await ((try? procs) ?? [])
+                .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+            self.actions = await ((try? acts) ?? [])
+                .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
             if let fetched = try? await client.listAlerts() {
                 self.alerts = fetched.sorted { $0.ts > $1.ts }
                 self.processAlertNotifications()
@@ -481,6 +492,16 @@ final class KomodoStore {
 
     func restart(_ deployment: DeploymentListItem) {
         self.run("Restart \(deployment.name)") { try await $0.restartDeployment(deployment.id) }
+    }
+
+    // Procedure / Action launcher.
+
+    func runProcedure(_ item: ExecResourceItem) {
+        self.run("Run \(item.name)") { try await $0.runProcedure(item.id) }
+    }
+
+    func runAction(_ item: ExecResourceItem) {
+        self.run("Run \(item.name)") { try await $0.runAction(item.id) }
     }
 
     func checkAllForUpdates() {
