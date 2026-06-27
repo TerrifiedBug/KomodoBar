@@ -124,7 +124,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         self.addStacks(to: menu)
         menu.addItem(.separator())
         self.addDeployments(to: menu) // self-guards + adds its own trailing separator
-        self.addContainersRollup(to: menu)
         self.addRunMenu(to: menu)
 
         self.addAction(to: menu, "Check All Stacks for Updates", #selector(self.checkAll))

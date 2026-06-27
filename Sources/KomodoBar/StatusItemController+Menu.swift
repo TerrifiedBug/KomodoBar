@@ -130,22 +130,43 @@ extension StatusItemController {
         // Expand-all escape hatch: filtered-out stacks stay reachable (and actionable)
         // under a submenu, so the user can e.g. redeploy a healthy hidden stack.
         if self.store.hiddenStackCount > 0 {
-            let parent = NSMenuItem()
-            parent.title = "Show \(self.store.hiddenStackCount) hidden"
-            parent.attributedTitle = NSAttributedString(
-                string: "Show \(self.store.hiddenStackCount) hidden (\(self.store.stackFilter.label.lowercased()))",
-                attributes: [
-                    .foregroundColor: NSColor.secondaryLabelColor,
-                    .font: NSFont.menuFont(ofSize: NSFont.smallSystemFontSize),
-                ],
-            )
-            let sub = NSMenu()
-            for stack in self.store.hiddenStacks {
-                self.addStackRow(stack, to: sub)
-            }
-            parent.submenu = sub
-            menu.addItem(parent)
+            self.addHiddenSection(to: menu)
         }
+    }
+
+    /// "Show N hidden" — hidden non-running stacks (down/stopped/…) listed directly so
+    /// problems surface, with the healthy/running ones tucked under a nested submenu.
+    private func addHiddenSection(to menu: NSMenu) {
+        let parent = NSMenuItem()
+        parent.title = "Show \(self.store.hiddenStackCount) hidden"
+        parent.attributedTitle = NSAttributedString(
+            string: "Show \(self.store.hiddenStackCount) hidden",
+            attributes: [
+                .foregroundColor: NSColor.secondaryLabelColor,
+                .font: NSFont.menuFont(ofSize: NSFont.smallSystemFontSize),
+            ],
+        )
+        let sub = NSMenu()
+        let hidden = self.store.hiddenStacks
+        let notRunning = hidden.filter { $0.state != .running }
+        let running = hidden.filter { $0.state == .running }
+        for stack in notRunning {
+            self.addStackRow(stack, to: sub)
+        }
+        if !running.isEmpty {
+            if !notRunning.isEmpty { sub.addItem(.separator()) }
+            let runningParent = NSMenuItem()
+            runningParent.title = "Running (\(running.count))"
+            runningParent.attributedTitle = self.row(.healthy, "Running (\(running.count))", secondary: nil)
+            let runningSub = NSMenu()
+            for stack in running {
+                self.addStackRow(stack, to: runningSub)
+            }
+            runningParent.submenu = runningSub
+            sub.addItem(runningParent)
+        }
+        parent.submenu = sub
+        menu.addItem(parent)
     }
 
     private func addUpdatesSection(to menu: NSMenu) {
@@ -168,11 +189,11 @@ extension StatusItemController {
         for stack in self.store.stacksWithUpdates {
             let item = NSMenuItem()
             item.title = stack.name
-            item.attributedTitle = self.row(
-                stack.state.severity,
-                stack.name,
-                secondary: stack.servicesWithUpdate.joined(separator: ", "),
-            )
+            // Surface the server node alongside the services with a pending update.
+            let server = self.store.servers.first { $0.id == stack.info.serverId }?.name
+            let services = stack.servicesWithUpdate.joined(separator: ", ")
+            let detail = [server, services.isEmpty ? nil : services].compactMap(\.self).joined(separator: " · ")
+            item.attributedTitle = self.row(stack.state.severity, stack.name, secondary: detail.isEmpty ? nil : detail)
             item.submenu = self.stackSubmenu(for: stack)
             sub.addItem(item)
         }

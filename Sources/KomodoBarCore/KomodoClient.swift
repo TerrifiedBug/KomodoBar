@@ -104,11 +104,6 @@ public struct KomodoClient: Sendable {
         try await self.read("GetDeploymentsSummary")
     }
 
-    /// Rollup of all raw Docker containers across servers — for the at-a-glance count.
-    public func dockerContainersSummary() async throws -> DockerContainersSummary {
-        try await self.read("GetDockerContainersSummary")
-    }
-
     public func listProcedures() async throws -> [ExecResourceItem] {
         try await self.read("ListProcedures")
     }

@@ -42,10 +42,9 @@ final class KomodoStore {
     /// Open (unresolved) Komodo alerts, newest first.
     private(set) var alerts: [AlertItem] = []
 
-    /// Deployments (single managed containers) + a rollup of raw Docker containers.
+    /// Deployments (single managed containers).
     private(set) var deployments: [DeploymentListItem] = []
     private(set) var deploymentsSummary: DeploymentsSummary?
-    private(set) var containersSummary: DockerContainersSummary?
 
     /// Runnable Komodo Procedures and Actions, for the Run launcher.
     private(set) var procedures: [ExecResourceItem] = []
@@ -288,7 +287,7 @@ final class KomodoStore {
             self.connection = .unconfigured
             self.servers = []; self.stacks = []; self.serversSummary = nil; self.stacksSummary = nil
             self.alerts = []
-            self.deployments = []; self.deploymentsSummary = nil; self.containersSummary = nil
+            self.deployments = []; self.deploymentsSummary = nil
             self.procedures = []; self.actions = []; self.recentUpdates = []
         }
         self.notify()
@@ -342,14 +341,12 @@ final class KomodoStore {
             // concurrently.
             async let dep = client.listDeployments()
             async let depSum = client.deploymentsSummary()
-            async let conSum = client.dockerContainersSummary()
             async let procs = client.listProcedures()
             async let acts = client.listActions()
             async let upd = client.listUpdates()
             self.deployments = await ((try? dep) ?? [])
                 .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
             self.deploymentsSummary = try? await depSum
-            self.containersSummary = try? await conSum
             self.procedures = await ((try? procs) ?? [])
                 .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
             self.actions = await ((try? acts) ?? [])

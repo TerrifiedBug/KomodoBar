@@ -6,7 +6,7 @@
 
 Glance at your Komodo fleet from the menu bar and act on it without opening the web UI:
 
-- **Server, stack & deployment health** — per-resource state with fleet rollups, plus an at-a-glance container count for container-only setups.
+- **Server, stack & deployment health** — per-resource state with fleet rollups, with Deployments support for container-only setups.
 - **Find & focus** — type to jump to a resource by name; pin (★) or auto-surface recently-used stacks in a Quick Access section; optionally group stacks by server.
 - **Filters** — hide intentionally-down stacks, show only problems, and still reach hidden ones via "Show N hidden".
 - **Updates** — pending image updates are badged ⬆; "Update All" applies them with deploy-if-changed (unchanged stacks keep running).

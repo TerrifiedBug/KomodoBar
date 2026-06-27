@@ -259,26 +259,6 @@ public struct DeploymentsSummary: Decodable, Sendable {
     }
 }
 
-/// Rollup across all raw Docker containers on all connected servers.
-public struct DockerContainersSummary: Decodable, Sendable {
-    public let total: Int
-    public let running: Int
-    public let stopped: Int
-    public let unhealthy: Int
-    public let unknown: Int
-
-    enum CodingKeys: String, CodingKey { case total, running, stopped, unhealthy, unknown }
-
-    public init(from decoder: any Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        func n(_ key: CodingKeys) -> Int {
-            (try? c.decodeIfPresent(Int.self, forKey: key)) ?? 0
-        }
-        self.total = n(.total); self.running = n(.running); self.stopped = n(.stopped)
-        self.unhealthy = n(.unhealthy); self.unknown = n(.unknown)
-    }
-}
-
 // MARK: - Per-service update info (StackServiceWithUpdate)
 
 public struct StackServiceWithUpdate: Decodable, Sendable, Identifiable {

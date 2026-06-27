@@ -160,19 +160,13 @@ private func decode<T: Decodable>(_: T.Type, _ json: String) throws -> T {
     #expect(deployment.info.serverId == "srv1")
 }
 
-@Test func `deployment and container summaries decode`() throws {
+@Test func `deployments summary decodes`() throws {
     let dep = try decode(
         DeploymentsSummary.self,
         "{\"total\":4,\"running\":3,\"stopped\":0,\"not_deployed\":1,\"unhealthy\":0,\"unknown\":0}",
     )
     #expect(dep.total == 4)
     #expect(dep.notDeployed == 1)
-    let con = try decode(
-        DockerContainersSummary.self,
-        "{\"total\":120,\"running\":118,\"stopped\":1,\"unhealthy\":1,\"unknown\":0}",
-    )
-    #expect(con.total == 120)
-    #expect(con.unhealthy == 1)
 }
 
 // MARK: Alerts

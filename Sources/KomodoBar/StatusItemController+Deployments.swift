@@ -24,20 +24,6 @@ extension StatusItemController {
         menu.addItem(.separator())
     }
 
-    /// A single glanceable rollup of every raw Docker container across servers — at
-    /// hundreds-of-containers scale the answer is the count + broken bucket, not a list.
-    func addContainersRollup(to menu: NSMenu) {
-        guard let summary = self.store.containersSummary, summary.total > 0 else { return }
-        var detail = "\(summary.running)/\(summary.total) running"
-        if summary.unhealthy > 0 { detail += " · \(summary.unhealthy) unhealthy" }
-        let severity: HealthSeverity = summary.unhealthy > 0 ? .error : .healthy
-        let item = NSMenuItem()
-        item.attributedTitle = self.row(severity, "Containers", secondary: detail)
-        item.isEnabled = false
-        menu.addItem(item)
-        menu.addItem(.separator())
-    }
-
     private func deploymentSubmenu(for deployment: DeploymentListItem) -> NSMenu {
         let sub = NSMenu()
         if let status = deployment.info.status, !status.isEmpty {

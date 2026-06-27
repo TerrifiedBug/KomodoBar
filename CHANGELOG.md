@@ -9,7 +9,7 @@ All notable changes to KomodoBar are documented here (Keep a Changelog style).
 - **"Only problems" filter** plus a "Show N hidden" submenu so filtered-out stacks stay actionable.
 - **Update All** — apply pending updates with one click via deploy-if-changed (unchanged stacks keep running); per-stack "Update (deploy if changed)" alongside a force-redeploy.
 - **Background notifications** — macOS notifications when Komodo raises a new alert, with an enable toggle + severity threshold; an Alerts section with one-tap Acknowledge.
-- **Deployments + containers** — a Deployments section (deploy/start/stop/restart) and an at-a-glance container rollup, for container-only setups.
+- **Deployments** — a Deployments section (deploy/start/stop/restart), for container-only setups.
 - **Per-server grouping** (optional) with running/updates rollup badges, and "Redeploy all on <server>".
 - **Quick Access** — pinned (★) and recently-used stacks at the top of the menu.
 - **Mute & snooze** — silence a noisy stack/server/deployment (🔕) so "red" means "unacknowledged".
