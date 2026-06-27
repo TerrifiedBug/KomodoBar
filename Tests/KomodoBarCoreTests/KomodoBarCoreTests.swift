@@ -126,6 +126,15 @@ private func decode<T: Decodable>(_: T.Type, _ json: String) throws -> T {
     #expect(StackState.allCases.allSatisfy { StackFilter.all.includes($0) })
 }
 
+@Test func `stack filter only problems shows unhealthy and dead`() {
+    let filter = StackFilter.onlyProblems
+    #expect(filter.includes(.unhealthy))
+    #expect(filter.includes(.dead))
+    #expect(!filter.includes(.running))
+    #expect(!filter.includes(.stopped))
+    #expect(!filter.includes(.down)) // intentionally-off, not a problem
+}
+
 // MARK: Credentials parsing
 
 @Test func `credentials reject invalid UR ls`() {

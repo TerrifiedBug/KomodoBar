@@ -87,6 +87,7 @@ public enum StackFilter: String, CaseIterable, Identifiable, Sendable {
     case all
     case hideDown
     case runningOnly
+    case onlyProblems
 
     public var id: String {
         rawValue
@@ -97,6 +98,7 @@ public enum StackFilter: String, CaseIterable, Identifiable, Sendable {
         case .all: "All stacks"
         case .hideDown: "Hide down stacks"
         case .runningOnly: "Only running"
+        case .onlyProblems: "Only problems"
         }
     }
 
@@ -105,6 +107,9 @@ public enum StackFilter: String, CaseIterable, Identifiable, Sendable {
         case .all: true
         case .hideDown: state != .down
         case .runningOnly: state == .running
+        // Genuine problems only — matches the red-lizard definition, which treats
+        // `down` as intentionally-off (not a problem) and ignores it.
+        case .onlyProblems: state == .unhealthy || state == .dead
         }
     }
 }
