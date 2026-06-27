@@ -6,13 +6,17 @@
 
 Glance at your Komodo fleet from the menu bar and act on it without opening the web UI:
 
-- **Server health** — per-server state (healthy / unreachable / disabled) and a fleet rollup.
-- **Stack health** — per-stack state (running / down / unhealthy / …) and a rollup.
-- **Pending updates** — stacks with a newer image available are badged ⬆; "Check for Updates" forces a fresh registry check.
-- **Actions** — redeploy, pull images, or restart a stack; "Redeploy All Stacks" in one click.
-- **At-a-glance icon** — the menu-bar lizard turns red and shows a count when something needs attention.
+- **Server, stack & deployment health** — per-resource state with fleet rollups, plus an at-a-glance container count for container-only setups.
+- **Find & focus** — type to jump to a resource by name; pin (★) or auto-surface recently-used stacks in a Quick Access section; optionally group stacks by server.
+- **Filters** — hide intentionally-down stacks, show only problems, and still reach hidden ones via "Show N hidden".
+- **Updates** — pending image updates are badged ⬆; "Update All" applies them with deploy-if-changed (unchanged stacks keep running).
+- **Actions** — update / redeploy / pull / restart per stack; deploy / start / stop / restart per deployment; "Redeploy N Unhealthy", "Redeploy all on <server>", and "Redeploy All". Run your Komodo Procedures & Actions from the menu.
+- **Notifications** — get a macOS notification when Komodo raises a new alert (with a severity threshold); acknowledge alerts from the menu.
+- **Mute & snooze** — silence a known-noisy resource (🔕) so the red icon means "unacknowledged".
+- **Recent Activity** — a feed of recent operations with success/failure markers, plus deep-links to open anything in the Komodo web UI.
+- **At-a-glance icon** — the menu-bar lizard turns red and shows a count when something genuinely needs attention.
 
-Destructive actions (redeploy / restart) ask for confirmation first.
+Destructive actions (redeploy / restart / run) ask for confirmation first.
 
 ## Install
 
