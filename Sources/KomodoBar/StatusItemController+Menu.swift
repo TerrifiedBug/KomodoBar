@@ -81,6 +81,25 @@ extension StatusItemController {
         return submenu
     }
 
+    /// Top-of-menu shortcuts: pinned stacks (★) and recently-acted-on stacks, so the
+    /// handful you actually operate on stay one click away at 56-stack scale.
+    func addQuickAccess(to menu: NSMenu) {
+        let quick = self.store.quickAccessStacks
+        guard !quick.isEmpty else { return }
+        self.addInfo(to: menu, "Quick Access")
+        for stack in quick {
+            let item = NSMenuItem()
+            item.title = stack.name
+            let pin = self.store.isPinned(stack.id) ? "★ " : ""
+            var label = stack.state.displayName
+            if stack.updateAvailable { label += " · ⬆ update" }
+            item.attributedTitle = self.row(stack.state.severity, "\(pin)\(stack.name)", secondary: label)
+            item.submenu = self.stackSubmenu(for: stack)
+            menu.addItem(item)
+        }
+        menu.addItem(.separator())
+    }
+
     func addStacks(to menu: NSMenu) {
         let summary = self.store.stacksSummary
         let header = summary.map { "Stacks — \($0.running)/\($0.total) running" } ?? "Stacks"
@@ -225,8 +244,16 @@ extension StatusItemController {
             item.representedObject = stack
             sub.addItem(item)
         }
+        sub.addItem(.separator())
+        let pin = NSMenuItem(
+            title: self.store.isPinned(stack.id) ? "Unpin" : "Pin to Quick Access",
+            action: #selector(self.stackTogglePin(_:)),
+            keyEquivalent: "",
+        )
+        pin.target = self
+        pin.representedObject = stack
+        sub.addItem(pin)
         if self.store.dashboardBaseURL != nil {
-            sub.addItem(.separator())
             let open = NSMenuItem(
                 title: "Open in Komodo",
                 action: #selector(self.openStackInKomodo(_:)),

@@ -162,6 +162,46 @@ final class KomodoStore {
         self.stacksWithUpdates.count
     }
 
+    // MARK: Quick Access (pinned + recent stacks)
+
+    private let recentLimit = 8
+
+    /// Stack ids the user pinned to the top. Persisted.
+    var pinnedIds: Set<String> {
+        get { Set(UserDefaults.standard.stringArray(forKey: "komodo.pinned") ?? []) }
+        set { UserDefaults.standard.set(Array(newValue), forKey: "komodo.pinned"); self.notify() }
+    }
+
+    func isPinned(_ id: String) -> Bool {
+        self.pinnedIds.contains(id)
+    }
+
+    func togglePin(_ id: String) {
+        var pinned = self.pinnedIds
+        if pinned.contains(id) { pinned.remove(id) } else { pinned.insert(id) }
+        self.pinnedIds = pinned
+    }
+
+    /// Most-recently-acted-on stack ids, newest first. Captured on each action.
+    private var recentIds: [String] {
+        UserDefaults.standard.stringArray(forKey: "komodo.recent") ?? []
+    }
+
+    private func noteRecent(_ id: String) {
+        var recent = self.recentIds.filter { $0 != id }
+        recent.insert(id, at: 0)
+        UserDefaults.standard.set(Array(recent.prefix(self.recentLimit)), forKey: "komodo.recent")
+    }
+
+    /// Pinned stacks (stable name order) then recents, deduped and capped — the
+    /// top-of-menu shortcut list. Pinned entries appear even if a filter hides them.
+    var quickAccessStacks: [StackListItem] {
+        let byId = Dictionary(self.stacks.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let pinned = self.stacks.filter { self.pinnedIds.contains($0.id) }
+        let recent = self.recentIds.compactMap { byId[$0] }.filter { !self.pinnedIds.contains($0.id) }
+        return Array((pinned + recent).prefix(10))
+    }
+
     // MARK: Lifecycle
 
     func start() {
@@ -320,12 +360,14 @@ final class KomodoStore {
     // MARK: Actions (fire, then re-poll to observe the new state)
 
     func deploy(_ stack: StackListItem) {
+        self.noteRecent(stack.id)
         self.run("Redeploy \(stack.name)") { try await $0.deployStack(stack.id) }
     }
 
     /// Apply a pending update to one stack — deploys only if its content changed,
     /// so an already-current stack is left untouched (no downtime).
     func deployIfChanged(_ stack: StackListItem) {
+        self.noteRecent(stack.id)
         self.run("Update \(stack.name)") { try await $0.deployStackIfChanged(stack.id) }
     }
 
@@ -336,14 +378,17 @@ final class KomodoStore {
     }
 
     func pull(_ stack: StackListItem) {
+        self.noteRecent(stack.id)
         self.run("Pull \(stack.name)") { try await $0.pullStack(stack.id) }
     }
 
     func restart(_ stack: StackListItem) {
+        self.noteRecent(stack.id)
         self.run("Restart \(stack.name)") { try await $0.restartStack(stack.id) }
     }
 
     func checkForUpdate(_ stack: StackListItem) {
+        self.noteRecent(stack.id)
         self.run("Check \(stack.name)") { _ = try await $0.checkStackForUpdate(stack.id) }
     }
 

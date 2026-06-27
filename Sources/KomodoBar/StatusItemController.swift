@@ -118,6 +118,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         }
 
         self.addAlerts(to: menu) // adds its own trailing separator when non-empty
+        self.addQuickAccess(to: menu) // adds its own trailing separator when non-empty
         self.addServers(to: menu)
         menu.addItem(.separator())
         self.addStacks(to: menu)

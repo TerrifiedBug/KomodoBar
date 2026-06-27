@@ -73,28 +73,33 @@ extension StatusItemController {
         self.store.checkForUpdate(stack)
     }
 
+    @objc func stackTogglePin(_ sender: NSMenuItem) {
+        guard let stack = sender.representedObject as? StackListItem else { return }
+        self.store.togglePin(stack.id)
+    }
+
     @objc func checkAppUpdates() {
         self.updater.checkForUpdates()
     }
 
     @objc func openStackInKomodo(_ sender: NSMenuItem) {
         guard let stack = sender.representedObject as? StackListItem else { return }
-        self.open(path: "stacks/\(stack.id)")
+        self.openKomodo(path: "stacks/\(stack.id)")
     }
 
     @objc func openServerInKomodo(_ sender: NSMenuItem) {
         guard let server = sender.representedObject as? ServerListItem else { return }
-        self.open(path: "servers/\(server.id)")
+        self.openKomodo(path: "servers/\(server.id)")
     }
 
     @objc func openDashboard() {
-        self.open(path: nil)
+        self.openKomodo(path: nil)
     }
 
     /// Open a path on the connected Komodo instance in the default browser. Falls
     /// back to the dashboard root if the resource path can't be built (e.g. behind
     /// a reverse proxy that rewrites routes).
-    private func open(path: String?) {
+    func openKomodo(path: String?) {
         guard let base = store.dashboardBaseURL else { return }
         let url = path.map { base.appendingPathComponent($0) } ?? base
         NSWorkspace.shared.open(url)
