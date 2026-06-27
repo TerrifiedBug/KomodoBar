@@ -146,9 +146,20 @@ final class KomodoStore {
         set { UserDefaults.standard.set(newValue, forKey: "komodo.groupByServer"); self.notify() }
     }
 
+    /// Hide `stopped` stacks from the menu entirely (visible and hidden). Persisted.
+    var excludeStopped: Bool {
+        get { UserDefaults.standard.bool(forKey: "komodo.excludeStopped") }
+        set { UserDefaults.standard.set(newValue, forKey: "komodo.excludeStopped"); self.notify() }
+    }
+
+    /// Stacks eligible for display, after the global `excludeStopped` rule.
+    private var displayStacks: [StackListItem] {
+        self.excludeStopped ? self.stacks.filter { $0.state != .stopped } : self.stacks
+    }
+
     /// Stacks shown in the menu after applying `stackFilter`.
     var visibleStacks: [StackListItem] {
-        self.stacks.filter { self.stackFilter.includes($0.state) }
+        self.displayStacks.filter { self.stackFilter.includes($0.state) }
     }
 
     /// Visible stacks grouped by server, for the grouped menu layout.
@@ -160,12 +171,12 @@ final class KomodoStore {
     /// Stacks the current filter is hiding — surfaced under "Show N hidden" so the
     /// user can still act on (e.g. redeploy) a healthy stack the filter dropped.
     var hiddenStacks: [StackListItem] {
-        self.stacks.filter { !self.stackFilter.includes($0.state) }
+        self.displayStacks.filter { !self.stackFilter.includes($0.state) }
     }
 
     /// How many stacks the filter is hiding right now.
     var hiddenStackCount: Int {
-        self.stacks.count - self.visibleStacks.count
+        self.displayStacks.count - self.visibleStacks.count
     }
 
     /// Base URL of the connected Komodo instance, for "Open in Komodo" deep-links.

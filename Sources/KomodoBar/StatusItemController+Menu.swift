@@ -148,22 +148,33 @@ extension StatusItemController {
         )
         let sub = NSMenu()
         let hidden = self.store.hiddenStacks
-        let notRunning = hidden.filter { $0.state != .running }
-        let running = hidden.filter { $0.state == .running }
-        for stack in notRunning {
+        // Problems (down/dead/unhealthy/…) listed directly; the benign buckets —
+        // stopped and running — collapse into their own nested submenus.
+        for stack in hidden where stack.state != .running && stack.state != .stopped {
             self.addStackRow(stack, to: sub)
         }
-        if !running.isEmpty {
-            if !notRunning.isEmpty { sub.addItem(.separator()) }
-            let runningParent = NSMenuItem()
-            runningParent.title = "Running (\(running.count))"
-            runningParent.attributedTitle = self.row(.healthy, "Running (\(running.count))", secondary: nil)
-            let runningSub = NSMenu()
-            for stack in running {
-                self.addStackRow(stack, to: runningSub)
-            }
-            runningParent.submenu = runningSub
-            sub.addItem(runningParent)
+        self.addNestedStackGroup("Stopped", .warning, hidden.filter { $0.state == .stopped }, to: sub)
+        self.addNestedStackGroup("Running", .healthy, hidden.filter { $0.state == .running }, to: sub)
+        parent.submenu = sub
+        menu.addItem(parent)
+    }
+
+    /// Collapse a bucket of stacks into a "<Title> (N) ▸" nested submenu, prefixed by
+    /// a separator when the parent already has rows. No-op for an empty bucket.
+    private func addNestedStackGroup(
+        _ title: String,
+        _ severity: HealthSeverity,
+        _ stacks: [StackListItem],
+        to menu: NSMenu,
+    ) {
+        guard !stacks.isEmpty else { return }
+        if menu.numberOfItems > 0 { menu.addItem(.separator()) }
+        let parent = NSMenuItem()
+        parent.title = "\(title) (\(stacks.count))"
+        parent.attributedTitle = self.row(severity, "\(title) (\(stacks.count))", secondary: nil)
+        let sub = NSMenu()
+        for stack in stacks {
+            self.addStackRow(stack, to: sub)
         }
         parent.submenu = sub
         menu.addItem(parent)
