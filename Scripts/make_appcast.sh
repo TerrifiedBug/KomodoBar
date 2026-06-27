@@ -20,5 +20,23 @@ GEN="$(command -v generate_appcast 2>/dev/null || true)"
   exit 1
 }
 
-"$GEN" "$ROOT/build" -o "$ROOT/appcast.xml"
+# Point enclosure URLs at the GitHub Release asset (not raw.githubusercontent,
+# the tool's default), derived from the git remote + version. Override with
+# DOWNLOAD_URL_PREFIX to host the zips elsewhere.
+# shellcheck source=/dev/null
+source "$ROOT/version.env" 2>/dev/null || true
+PREFIX="${DOWNLOAD_URL_PREFIX:-}"
+if [[ -z "$PREFIX" ]]; then
+  REMOTE="$(git -C "$ROOT" remote get-url origin 2>/dev/null || true)"
+  SLUG="$(printf '%s' "$REMOTE" | sed -E 's#^(git@github.com:|https://github.com/)##; s#\.git$##')"
+  [[ -n "$SLUG" && -n "${MARKETING_VERSION:-}" ]] &&
+    PREFIX="https://github.com/$SLUG/releases/download/v$MARKETING_VERSION/"
+fi
+
+if [[ -n "$PREFIX" ]]; then
+  "$GEN" "$ROOT/build" -o "$ROOT/appcast.xml" --download-url-prefix "$PREFIX"
+else
+  echo "==> note: no git remote/version; appcast URLs are relative. Set DOWNLOAD_URL_PREFIX." >&2
+  "$GEN" "$ROOT/build" -o "$ROOT/appcast.xml"
+fi
 echo "wrote $ROOT/appcast.xml"

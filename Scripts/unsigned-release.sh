@@ -16,6 +16,9 @@ ZIP="$ROOT/build/$APP_NAME-$MARKETING_VERSION.zip"
 "$ROOT/Scripts/package_app.sh" release
 
 echo "==> zip"
+# Drop stale zips so generate_appcast only (re)signs the current version with the
+# current release URL; older versions stay in appcast.xml from their own entries.
+rm -f "$ROOT/build/"*.zip
 ditto -c -k --keepParent "$BUNDLE" "$ZIP"
 
 # Refresh the appcast only if a real Sparkle public key has been set.
