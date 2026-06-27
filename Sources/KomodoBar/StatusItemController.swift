@@ -130,6 +130,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         self.addAction(to: menu, "Check All Stacks for Updates", #selector(self.checkAll))
         self.addAction(to: menu, "Redeploy All Stacks…", #selector(self.redeployAll))
         self.addAction(to: menu, "Refresh Now", #selector(self.refresh))
+        self.addRecentActivity(to: menu)
         self.addFooter(to: menu)
     }
 

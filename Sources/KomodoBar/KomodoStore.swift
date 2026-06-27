@@ -51,6 +51,9 @@ final class KomodoStore {
     private(set) var procedures: [ExecResourceItem] = []
     private(set) var actions: [ExecResourceItem] = []
 
+    /// Recent operation history (newest first), for the Recent Activity feed.
+    private(set) var recentUpdates: [UpdateListItem] = []
+
     /// Called after any state change so the status-bar icon can repaint.
     var onChange: (@MainActor () -> Void)?
 
@@ -286,7 +289,7 @@ final class KomodoStore {
             self.servers = []; self.stacks = []; self.serversSummary = nil; self.stacksSummary = nil
             self.alerts = []
             self.deployments = []; self.deploymentsSummary = nil; self.containersSummary = nil
-            self.procedures = []; self.actions = []
+            self.procedures = []; self.actions = []; self.recentUpdates = []
         }
         self.notify()
         self.restartPolling()
@@ -342,6 +345,7 @@ final class KomodoStore {
             async let conSum = client.dockerContainersSummary()
             async let procs = client.listProcedures()
             async let acts = client.listActions()
+            async let upd = client.listUpdates()
             self.deployments = await ((try? dep) ?? [])
                 .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
             self.deploymentsSummary = try? await depSum
@@ -350,6 +354,7 @@ final class KomodoStore {
                 .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
             self.actions = await ((try? acts) ?? [])
                 .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+            self.recentUpdates = await Array(((try? upd) ?? []).prefix(20))
             if let fetched = try? await client.listAlerts() {
                 self.alerts = fetched.sorted { $0.ts > $1.ts }
                 self.processAlertNotifications()
