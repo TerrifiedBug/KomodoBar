@@ -11,7 +11,7 @@ enum Keychain {
         let data = Data(value.utf8)
         let base: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
+            kSecAttrService as String: self.service,
             kSecAttrAccount as String: account,
         ]
         SecItemDelete(base as CFDictionary)
@@ -24,7 +24,7 @@ enum Keychain {
     static func get(account: String) -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
+            kSecAttrService as String: self.service,
             kSecAttrAccount as String: account,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne,
@@ -38,7 +38,7 @@ enum Keychain {
     static func delete(account: String) {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
+            kSecAttrService as String: self.service,
             kSecAttrAccount as String: account,
         ]
         SecItemDelete(query as CFDictionary)

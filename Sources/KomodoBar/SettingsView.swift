@@ -25,26 +25,28 @@ private struct ConnectionSettingsView: View {
     @State private var testOK = false
 
     private var credentials: KomodoCredentials? {
-        KomodoCredentials(urlString: address, apiKey: apiKey, apiSecret: apiSecret)
+        KomodoCredentials(urlString: self.address, apiKey: self.apiKey, apiSecret: self.apiSecret)
     }
 
     var body: some View {
         Form {
             Section {
-                TextField("Server URL", text: $address, prompt: Text("https://komodo.example.com"))
+                TextField("Server URL", text: self.$address, prompt: Text("https://komodo.example.com"))
                     .textContentType(.URL)
-                TextField("API Key", text: $apiKey, prompt: Text("the key from Settings → Users → Api Keys"))
-                SecureField("API Secret", text: $apiSecret, prompt: Text("shown once when the key is created"))
+                TextField("API Key", text: self.$apiKey, prompt: Text("the key from Settings → Users → Api Keys"))
+                SecureField("API Secret", text: self.$apiSecret, prompt: Text("shown once when the key is created"))
             } header: {
                 Text("Komodo Connection")
             } footer: {
-                Text("Komodo Core listens on port 9120 (HTTP) unless behind a reverse proxy. The secret is stored in your Keychain.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Text(
+                    "Komodo Core listens on port 9120 (HTTP) unless behind a reverse proxy. The secret is stored in your Keychain.",
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
 
             Section {
-                Picker("Refresh every", selection: $pollInterval) {
+                Picker("Refresh every", selection: self.$pollInterval) {
                     Text("15 seconds").tag(15.0)
                     Text("30 seconds").tag(30.0)
                     Text("1 minute").tag(60.0)
@@ -54,34 +56,36 @@ private struct ConnectionSettingsView: View {
             }
 
             Section {
-                Picker("Show stacks", selection: $stackFilter) {
+                Picker("Show stacks", selection: self.$stackFilter) {
                     ForEach(StackFilter.allCases) { Text($0.label).tag($0) }
                 }
-                .onChange(of: stackFilter) { _, newValue in
+                .onChange(of: self.stackFilter) { _, newValue in
                     KomodoStore.shared.stackFilter = newValue
                 }
             } header: {
                 Text("Display")
             } footer: {
-                Text("Down stacks are often intentionally off — hide them to cut menu clutter. Pending updates are always shown.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Text(
+                    "Down stacks are often intentionally off — hide them to cut menu clutter. Pending updates are always shown.",
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
 
             if let testResult {
-                Label(testResult, systemImage: testOK ? "checkmark.circle.fill" : "xmark.octagon.fill")
-                    .foregroundStyle(testOK ? .green : .red)
+                Label(testResult, systemImage: self.testOK ? "checkmark.circle.fill" : "xmark.octagon.fill")
+                    .foregroundStyle(self.testOK ? .green : .red)
                     .font(.callout)
             }
 
             HStack {
-                Button("Test Connection") { Task { await testConnection() } }
-                    .disabled(credentials == nil || testing)
-                if testing { ProgressView().controlSize(.small) }
+                Button("Test Connection") { Task { await self.testConnection() } }
+                    .disabled(self.credentials == nil || self.testing)
+                if self.testing { ProgressView().controlSize(.small) }
                 Spacer()
-                Button("Save") { save() }
+                Button("Save") { self.save() }
                     .keyboardShortcut(.defaultAction)
-                    .disabled(credentials == nil)
+                    .disabled(self.credentials == nil)
             }
         }
         .formStyle(.grouped)
@@ -89,27 +93,27 @@ private struct ConnectionSettingsView: View {
 
     private func testConnection() async {
         guard let credentials else { return }
-        testing = true
-        testResult = nil
+        self.testing = true
+        self.testResult = nil
         defer { testing = false }
         let client = KomodoClient(credentials: credentials)
         do {
             let version = try await client.ping()
             let summary = try await client.serversSummary()
-            testOK = true
-            testResult = "Connected to Komodo v\(version) — \(summary.total) server(s)."
+            self.testOK = true
+            self.testResult = "Connected to Komodo v\(version) — \(summary.total) server(s)."
         } catch let error as KomodoError {
             testOK = false
             testResult = error.errorDescription ?? error.message
         } catch {
-            testOK = false
-            testResult = error.localizedDescription
+            self.testOK = false
+            self.testResult = error.localizedDescription
         }
     }
 
     private func save() {
-        CredentialStore.save(address: address, apiKey: apiKey, apiSecret: apiSecret)
-        KomodoStore.shared.pollInterval = pollInterval
+        CredentialStore.save(address: self.address, apiKey: self.apiKey, apiSecret: self.apiSecret)
+        KomodoStore.shared.pollInterval = self.pollInterval
         KomodoStore.shared.reloadCredentials()
         KomodoStore.shared.refreshNow()
     }

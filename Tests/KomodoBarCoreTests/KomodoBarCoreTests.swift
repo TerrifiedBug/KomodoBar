@@ -1,9 +1,9 @@
 import Foundation
-import Testing
 @testable import KomodoBarCore
+import Testing
 
 /// Decoder configured exactly like `KomodoClient` (snake_case → camelCase).
-private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
+private func decode<T: Decodable>(_: T.Type, _ json: String) throws -> T {
     let decoder = JSONDecoder()
     decoder.keyDecodingStrategy = .convertFromSnakeCase
     return try decoder.decode(T.self, from: Data(json.utf8))
@@ -11,7 +11,7 @@ private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
 
 // MARK: State normalisation (survives Ok/NotOk vs ok/not-ok wire forms)
 
-@Test func serverStateNormalisesBothWireForms() {
+@Test func `server state normalises both wire forms`() {
     #expect(ServerState.normalize("Ok") == .ok)
     #expect(ServerState.normalize("ok") == .ok)
     #expect(ServerState.normalize("NotOk") == .notOk)
@@ -20,13 +20,13 @@ private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
     #expect(ServerState.normalize("something-new") == .unknown)
 }
 
-@Test func serverStateSeverityMapping() {
+@Test func `server state severity mapping`() {
     #expect(ServerState.ok.severity == .healthy)
     #expect(ServerState.notOk.severity == .error)
     #expect(ServerState.disabled.severity == .warning)
 }
 
-@Test func stackStateDecodesSnakeCaseAndFallsBack() throws {
+@Test func `stack state decodes snake case and falls back`() throws {
     #expect(try decode(StackState.self, "\"running\"") == .running)
     #expect(try decode(StackState.self, "\"down\"") == .down)
     #expect(try decode(StackState.self, "\"brand_new_state\"") == .unknown)
@@ -37,7 +37,7 @@ private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
 
 // MARK: List items
 
-@Test func serverListItemDecodesIgnoringExtraKeys() throws {
+@Test func `server list item decodes ignoring extra keys`() throws {
     let json = """
     { "id": "abc", "type": "Server", "name": "prod-1", "tags": ["eu"],
       "info": { "state": "Ok", "region": "eu-west", "address": "http://10.0.0.2:8120",
@@ -51,7 +51,7 @@ private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
     #expect(item.info.version == "1.18.4")
 }
 
-@Test func stackListItemSurfacesPendingUpdates() throws {
+@Test func `stack list item surfaces pending updates`() throws {
     let json = """
     { "id": "s1", "type": "Stack", "name": "web", "tags": [],
       "info": { "state": "running", "status": "Up 3 days", "server_id": "srv1",
@@ -69,7 +69,7 @@ private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
     #expect(stack.servicesWithUpdate == ["app"])
 }
 
-@Test func stackWithoutServicesHasNoUpdate() throws {
+@Test func `stack without services has no update`() throws {
     let json = """
     { "id": "s2", "name": "cache", "info": { "state": "stopped" } }
     """
@@ -80,19 +80,23 @@ private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
 
 // MARK: Summaries & responses
 
-@Test func summariesDecode() throws {
-    let servers = try decode(ServersSummary.self,
-        "{\"total\":5,\"healthy\":4,\"warning\":0,\"unhealthy\":1,\"disabled\":0}")
+@Test func `summaries decode`() throws {
+    let servers = try decode(
+        ServersSummary.self,
+        "{\"total\":5,\"healthy\":4,\"warning\":0,\"unhealthy\":1,\"disabled\":0}",
+    )
     #expect(servers.total == 5)
     #expect(servers.needsAttention == 1)
 
-    let stacks = try decode(StacksSummary.self,
-        "{\"total\":10,\"running\":8,\"stopped\":1,\"down\":1,\"unhealthy\":0,\"unknown\":0}")
+    let stacks = try decode(
+        StacksSummary.self,
+        "{\"total\":10,\"running\":8,\"stopped\":1,\"down\":1,\"unhealthy\":0,\"unknown\":0}",
+    )
     #expect(stacks.running == 8)
     #expect(stacks.needsAttention == 1)
 }
 
-@Test func checkStackForUpdateResponseDecodes() throws {
+@Test func `check stack for update response decodes`() throws {
     let json = """
     { "stack": "s1", "services": [ { "service": "app", "image": "nginx", "update_available": true } ] }
     """
@@ -103,7 +107,7 @@ private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
 
 // MARK: Stack filter
 
-@Test func stackFilterHideDownHidesOnlyDown() {
+@Test func `stack filter hide down hides only down`() {
     let filter = StackFilter.hideDown
     #expect(filter.includes(.running))
     #expect(filter.includes(.stopped)) // stopped stays — it's not "down"
@@ -111,20 +115,20 @@ private func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
     #expect(!filter.includes(.down))
 }
 
-@Test func stackFilterRunningOnly() {
+@Test func `stack filter running only`() {
     let filter = StackFilter.runningOnly
     #expect(filter.includes(.running))
     #expect(!filter.includes(.stopped))
     #expect(!filter.includes(.down))
 }
 
-@Test func stackFilterAllShowsEverything() {
+@Test func `stack filter all shows everything`() {
     #expect(StackState.allCases.allSatisfy { StackFilter.all.includes($0) })
 }
 
 // MARK: Credentials parsing
 
-@Test func credentialsRejectInvalidURLs() {
+@Test func `credentials reject invalid UR ls`() {
     #expect(KomodoCredentials(urlString: "", apiKey: "k", apiSecret: "s") == nil)
     #expect(KomodoCredentials(urlString: "not a url", apiKey: "k", apiSecret: "s") == nil)
     #expect(KomodoCredentials(urlString: "https://komodo.example.com", apiKey: "k", apiSecret: "s") != nil)

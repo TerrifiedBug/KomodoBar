@@ -1,6 +1,6 @@
 import Foundation
 #if canImport(Sparkle)
-import Sparkle
+    import Sparkle
 #endif
 
 /// Abstracts auto-update so dev/unsigned/Homebrew builds can use a no-op and tests
@@ -16,7 +16,10 @@ protocol UpdaterProviding {
 /// (Homebrew manages its own updates).
 @MainActor
 final class DisabledUpdater: UpdaterProviding {
-    var canCheckForUpdates: Bool { false }
+    var canCheckForUpdates: Bool {
+        false
+    }
+
     func start() {}
     func checkForUpdates() {}
 }
@@ -24,40 +27,48 @@ final class DisabledUpdater: UpdaterProviding {
 @MainActor
 func makeUpdater() -> any UpdaterProviding {
     #if canImport(Sparkle)
-    if SparkleUpdater.shouldEnable {
-        return SparkleUpdater()
-    }
+        if SparkleUpdater.shouldEnable {
+            return SparkleUpdater()
+        }
     #endif
     return DisabledUpdater()
 }
 
 #if canImport(Sparkle)
-@MainActor
-final class SparkleUpdater: NSObject, UpdaterProviding {
-    private let controller: SPUStandardUpdaterController
+    @MainActor
+    final class SparkleUpdater: NSObject, UpdaterProviding {
+        private let controller: SPUStandardUpdaterController
 
-    /// Only enable Sparkle for a real .app bundle that is not a Homebrew cask,
-    /// AND only once a real EdDSA public key is baked in. Without a key (dev
-    /// builds) the appcast feed is unsigned/missing, so auto-checks just throw a
-    /// "failed to update" alert — keep the no-op updater instead.
-    static var shouldEnable: Bool {
-        let path = Bundle.main.bundlePath
-        guard path.hasSuffix(".app"), !path.contains("/Caskroom/") else { return false }
-        let key = Bundle.main.object(forInfoDictionaryKey: "SUPublicEDKey") as? String ?? ""
-        return !key.isEmpty && !key.hasPrefix("REPLACE_")
+        /// Only enable Sparkle for a real .app bundle that is not a Homebrew cask,
+        /// AND only once a real EdDSA public key is baked in. Without a key (dev
+        /// builds) the appcast feed is unsigned/missing, so auto-checks just throw a
+        /// "failed to update" alert — keep the no-op updater instead.
+        static var shouldEnable: Bool {
+            let path = Bundle.main.bundlePath
+            guard path.hasSuffix(".app"), !path.contains("/Caskroom/") else { return false }
+            let key = Bundle.main.object(forInfoDictionaryKey: "SUPublicEDKey") as? String ?? ""
+            return !key.isEmpty && !key.hasPrefix("REPLACE_")
+        }
+
+        override init() {
+            self.controller = SPUStandardUpdaterController(
+                startingUpdater: false,
+                updaterDelegate: nil,
+                userDriverDelegate: nil,
+            )
+            super.init()
+        }
+
+        var canCheckForUpdates: Bool {
+            true
+        }
+
+        func start() {
+            self.controller.startUpdater()
+        }
+
+        func checkForUpdates() {
+            self.controller.updater.checkForUpdates()
+        }
     }
-
-    override init() {
-        controller = SPUStandardUpdaterController(
-            startingUpdater: false,
-            updaterDelegate: nil,
-            userDriverDelegate: nil
-        )
-        super.init()
-    }
-
-    var canCheckForUpdates: Bool { true }
-    func start() { controller.startUpdater() }
-    func checkForUpdates() { controller.updater.checkForUpdates() }
-}
 #endif

@@ -24,15 +24,18 @@ enum CredentialStore {
     static var apiSecret: String {
         get { Keychain.get(account: Key.secretAccount) ?? "" }
         set {
-            if newValue.isEmpty { Keychain.delete(account: Key.secretAccount) }
-            else { Keychain.set(newValue, account: Key.secretAccount) }
+            if newValue.isEmpty {
+                Keychain.delete(account: Key.secretAccount)
+            } else {
+                Keychain.set(newValue, account: Key.secretAccount)
+            }
         }
     }
 
     /// A usable credentials value, or nil if not fully configured.
     static func load() -> KomodoCredentials? {
-        KomodoCredentials(urlString: address, apiKey: apiKey, apiSecret: apiSecret)
-            .flatMap { !apiKey.isEmpty && !apiSecret.isEmpty ? $0 : nil }
+        KomodoCredentials(urlString: self.address, apiKey: self.apiKey, apiSecret: self.apiSecret)
+            .flatMap { !self.apiKey.isEmpty && !self.apiSecret.isEmpty ? $0 : nil }
     }
 
     static func save(address: String, apiKey: String, apiSecret: String) {

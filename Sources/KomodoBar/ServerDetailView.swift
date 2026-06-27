@@ -29,22 +29,22 @@ struct ServerDetailView: View {
             if let stats {
                 MetricRow(
                     label: "CPU",
-                    detail: "\(percent(stats.cpuPerc))%",
-                    values: cpuHistory,
-                    tint: tint(stats.cpuPerc / 100)
+                    detail: "\(self.percent(stats.cpuPerc))%",
+                    values: self.cpuHistory,
+                    tint: self.tint(stats.cpuPerc / 100),
                 )
                 MetricRow(
                     label: "Mem",
-                    detail: "\(gb(stats.memUsedGb)) / \(gb(stats.memTotalGb)) GB · \(percent(stats.memPercent * 100))%",
-                    values: memHistory,
-                    tint: tint(stats.memPercent)
+                    detail: "\(self.gb(stats.memUsedGb)) / \(self.gb(stats.memTotalGb)) GB · \(self.percent(stats.memPercent * 100))%",
+                    values: self.memHistory,
+                    tint: self.tint(stats.memPercent),
                 )
                 if let disk = stats.primaryDisk {
                     MetricRow(
                         label: "Disk",
-                        detail: "\(gb(disk.usedGb)) / \(gb(disk.totalGb)) GB · \(percent(disk.percent * 100))%",
-                        values: diskHistory,
-                        tint: tint(disk.percent)
+                        detail: "\(self.gb(disk.usedGb)) / \(self.gb(disk.totalGb)) GB · \(self.percent(disk.percent * 100))%",
+                        values: self.diskHistory,
+                        tint: self.tint(disk.percent),
                     )
                 }
             } else {
@@ -57,8 +57,14 @@ struct ServerDetailView: View {
         .frame(width: 280, alignment: .leading)
     }
 
-    private func percent(_ value: Double) -> Int { Int(value.rounded()) }
-    private func gb(_ value: Double) -> String { String(format: "%.1f", value) }
+    private func percent(_ value: Double) -> Int {
+        Int(value.rounded())
+    }
+
+    private func gb(_ value: Double) -> String {
+        String(format: "%.1f", value)
+    }
+
     private func tint(_ fraction: Double) -> Color {
         fraction > 0.9 ? .red : (fraction > 0.75 ? .orange : .green)
     }
@@ -74,11 +80,11 @@ private struct MetricRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack {
-                Text(label).font(.callout).bold()
+                Text(self.label).font(.callout).bold()
                 Spacer()
-                Text(detail).font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                Text(self.detail).font(.caption).foregroundStyle(.secondary).monospacedDigit()
             }
-            Sparkline(values: values, tint: tint).frame(height: 22)
+            Sparkline(values: self.values, tint: self.tint).frame(height: 22)
         }
     }
 }
@@ -92,20 +98,25 @@ private struct Sparkline: View {
 
     var body: some View {
         GeometryReader { geo in
-            if values.count > 1 {
-                let lo = values.min() ?? 0
-                let hi = values.max() ?? 1
+            if self.values.count > 1 {
+                let lo = self.values.min() ?? 0
+                let hi = self.values.max() ?? 1
                 let span = max(hi - lo, 1)
-                let stepX = geo.size.width / CGFloat(values.count - 1)
+                let stepX = geo.size.width / CGFloat(self.values.count - 1)
                 Path { path in
-                    for (index, value) in values.enumerated() {
-                        let x = CGFloat(index) * stepX
-                        let y = geo.size.height * (1 - CGFloat((value - lo) / span))
-                        if index == 0 { path.move(to: CGPoint(x: x, y: y)) }
-                        else { path.addLine(to: CGPoint(x: x, y: y)) }
+                    for (index, value) in self.values.enumerated() {
+                        let point = CGPoint(
+                            x: CGFloat(index) * stepX,
+                            y: geo.size.height * (1 - CGFloat((value - lo) / span)),
+                        )
+                        if index == 0 {
+                            path.move(to: point)
+                        } else {
+                            path.addLine(to: point)
+                        }
                     }
                 }
-                .stroke(tint, style: StrokeStyle(lineWidth: 1.5, lineJoin: .round))
+                .stroke(self.tint, style: StrokeStyle(lineWidth: 1.5, lineJoin: .round))
             } else {
                 // Single sample so far: flat baseline so the row isn't empty.
                 Path { path in

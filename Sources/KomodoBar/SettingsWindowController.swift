@@ -13,7 +13,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private var window: NSWindow?
 
     func show() {
-        if window == nil {
+        if self.window == nil {
             let hosting = NSHostingController(rootView: SettingsView())
             let window = NSWindow(contentViewController: hosting)
             window.title = "KomodoBar Settings"
@@ -26,14 +26,14 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
-        window?.makeKeyAndOrderFront(nil)
-        window?.orderFrontRegardless()
+        self.window?.makeKeyAndOrderFront(nil)
+        self.window?.orderFrontRegardless()
 
         // Verification hook: confirms the window actually became visible.
-        fputs("KomodoBar.settings: visible=\(window?.isVisible == true)\n", stderr)
+        fputs("KomodoBar.settings: visible=\(self.window?.isVisible == true)\n", stderr)
     }
 
-    func windowWillClose(_ notification: Notification) {
+    func windowWillClose(_: Notification) {
         NSApp.setActivationPolicy(.accessory)
     }
 }

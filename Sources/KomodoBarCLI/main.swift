@@ -31,7 +31,8 @@ if args.first == "--version" {
 guard let address = env("KOMODO_ADDRESS"),
       let key = env("KOMODO_API_KEY"),
       let secret = env("KOMODO_API_SECRET"),
-      let credentials = KomodoCredentials(urlString: address, apiKey: key, apiSecret: secret) else {
+      let credentials = KomodoCredentials(urlString: address, apiKey: key, apiSecret: secret)
+else {
     fail("Set KOMODO_ADDRESS, KOMODO_API_KEY and KOMODO_API_SECRET (a valid URL).", code: 2)
 }
 
@@ -39,17 +40,17 @@ let client = KomodoClient(credentials: credentials)
 
 func badge(_ severity: HealthSeverity) -> String {
     switch severity {
-    case .healthy: return "OK "
-    case .warning: return "WARN"
-    case .error: return "DOWN"
-    case .unknown: return "??? "
+    case .healthy: "OK "
+    case .warning: "WARN"
+    case .error: "DOWN"
+    case .unknown: "??? "
     }
 }
 
 do {
     switch args.first {
     case "version":
-        print(try await client.ping())
+        try await print(client.ping())
 
     case "servers":
         for server in try await client.listServers().sorted(by: { $0.name < $1.name }) {
@@ -66,7 +67,9 @@ do {
         async let serversSummary = client.serversSummary()
         async let stacksSummary = client.stacksSummary()
         let (servers, stacks) = try await (serversSummary, stacksSummary)
-        print("Servers: \(servers.healthy)/\(servers.total) healthy, \(servers.unhealthy) down, \(servers.disabled) disabled")
+        print(
+            "Servers: \(servers.healthy)/\(servers.total) healthy, \(servers.unhealthy) down, \(servers.disabled) disabled",
+        )
         print("Stacks:  \(stacks.running)/\(stacks.total) running, \(stacks.down) down, \(stacks.unhealthy) unhealthy")
 
     default:

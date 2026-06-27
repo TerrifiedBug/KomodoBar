@@ -1,6 +1,6 @@
 import Foundation
 #if canImport(FoundationNetworking)
-import FoundationNetworking
+    import FoundationNetworking
 #endif
 
 /// Credentials + base URL for a Komodo Core instance.
@@ -31,7 +31,7 @@ public struct KomodoError: Error, LocalizedError, Sendable {
     public let status: Int
     public let message: String
     public var errorDescription: String? {
-        status > 0 ? "Komodo error \(status): \(message)" : message
+        self.status > 0 ? "Komodo error \(self.status): \(self.message)" : self.message
     }
 }
 
@@ -56,7 +56,7 @@ public struct KomodoClient: Sendable {
     /// points at a Komodo Core before credentials are checked. Returns the version
     /// string. Tolerates either a JSON `{ "version": ... }` body or a bare string.
     public func ping() async throws -> String {
-        let url = credentials.baseURL.appendingPathComponent("version")
+        let url = self.credentials.baseURL.appendingPathComponent("version")
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.timeoutInterval = 15
@@ -64,11 +64,11 @@ public struct KomodoClient: Sendable {
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await session.data(for: request)
+            (data, response) = try await self.session.data(for: request)
         } catch {
             throw KomodoError(status: -1, message: error.localizedDescription)
         }
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+        guard let http = response as? HTTPURLResponse, (200 ..< 300).contains(http.statusCode) else {
             let status = (response as? HTTPURLResponse)?.statusCode ?? -1
             throw KomodoError(status: status, message: Self.extractMessage(from: data, status: status))
         }
@@ -76,15 +76,29 @@ public struct KomodoClient: Sendable {
         return String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }
 
-    public func version() async throws -> KomodoVersion { try await read("GetVersion") }
-    public func serversSummary() async throws -> ServersSummary { try await read("GetServersSummary") }
-    public func stacksSummary() async throws -> StacksSummary { try await read("GetStacksSummary") }
-    public func listServers() async throws -> [ServerListItem] { try await read("ListServers") }
-    public func listStacks() async throws -> [StackListItem] { try await read("ListStacks") }
+    public func version() async throws -> KomodoVersion {
+        try await self.read("GetVersion")
+    }
+
+    public func serversSummary() async throws -> ServersSummary {
+        try await self.read("GetServersSummary")
+    }
+
+    public func stacksSummary() async throws -> StacksSummary {
+        try await self.read("GetStacksSummary")
+    }
+
+    public func listServers() async throws -> [ServerListItem] {
+        try await self.read("ListServers")
+    }
+
+    public func listStacks() async throws -> [StackListItem] {
+        try await self.read("ListStacks")
+    }
 
     /// Realtime CPU/mem/disk for one server. Served from Core's in-memory cache.
     public func systemStats(server idOrName: String) async throws -> SystemStats {
-        try await call("read", "GetSystemStats", ["server": idOrName])
+        try await self.call("read", "GetSystemStats", ["server": idOrName])
     }
 
     // MARK: Writes
@@ -92,34 +106,42 @@ public struct KomodoClient: Sendable {
     /// Actively poll registries for newer images for a single stack and refresh
     /// its cache. `skip_auto_update` keeps this read-only (no auto redeploy).
     public func checkStackForUpdate(_ idOrName: String) async throws -> CheckStackForUpdateResponse {
-        try await call("write", "CheckStackForUpdate", ["stack": idOrName, "skip_auto_update": true])
+        try await self.call("write", "CheckStackForUpdate", ["stack": idOrName, "skip_auto_update": true])
     }
 
     // MARK: Executes (fire-and-refresh)
 
-    public func deployStack(_ idOrName: String) async throws { try await fire("DeployStack", ["stack": idOrName]) }
-    public func pullStack(_ idOrName: String) async throws { try await fire("PullStack", ["stack": idOrName]) }
-    public func restartStack(_ idOrName: String) async throws { try await fire("RestartStack", ["stack": idOrName]) }
+    public func deployStack(_ idOrName: String) async throws {
+        try await self.fire("DeployStack", ["stack": idOrName])
+    }
+
+    public func pullStack(_ idOrName: String) async throws {
+        try await self.fire("PullStack", ["stack": idOrName])
+    }
+
+    public func restartStack(_ idOrName: String) async throws {
+        try await self.fire("RestartStack", ["stack": idOrName])
+    }
 
     /// Redeploy every stack matching a pattern. `"*"` = all stacks.
     public func redeployAllStacks(pattern: String = "*") async throws {
-        try await fire("BatchDeployStack", ["pattern": pattern])
+        try await self.fire("BatchDeployStack", ["pattern": pattern])
     }
 
     /// Admin-only global poll for updates on poll/auto-update-enabled resources.
     /// `skipAutoUpdate: true` only raises UpdateAvailable alerts instead of deploying.
     public func globalAutoUpdate(skipAutoUpdate: Bool) async throws {
-        try await fire("GlobalAutoUpdate", ["skip_auto_update": skipAutoUpdate])
+        try await self.fire("GlobalAutoUpdate", ["skip_auto_update": skipAutoUpdate])
     }
 
     // MARK: - Plumbing
 
     private func read<T: Decodable>(_ name: String) async throws -> T {
-        try await call("read", name, [:])
+        try await self.call("read", name, [:])
     }
 
     private func fire(_ name: String, _ body: [String: Any]) async throws {
-        _ = try await perform("execute", name, body)
+        _ = try await self.perform("execute", name, body)
     }
 
     private func call<T: Decodable>(_ group: String, _ name: String, _ body: [String: Any]) async throws -> T {
@@ -134,19 +156,19 @@ public struct KomodoClient: Sendable {
     }
 
     private func perform(_ group: String, _ name: String, _ body: [String: Any]) async throws -> Data {
-        let url = credentials.baseURL.appendingPathComponent(group).appendingPathComponent(name)
+        let url = self.credentials.baseURL.appendingPathComponent(group).appendingPathComponent(name)
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.timeoutInterval = 20
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue(credentials.apiKey, forHTTPHeaderField: "X-Api-Key")
-        request.setValue(credentials.apiSecret, forHTTPHeaderField: "X-Api-Secret")
+        request.setValue(self.credentials.apiKey, forHTTPHeaderField: "X-Api-Key")
+        request.setValue(self.credentials.apiSecret, forHTTPHeaderField: "X-Api-Secret")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await session.data(for: request)
+            (data, response) = try await self.session.data(for: request)
         } catch {
             throw KomodoError(status: -1, message: error.localizedDescription)
         }
@@ -154,8 +176,11 @@ public struct KomodoClient: Sendable {
         guard let http = response as? HTTPURLResponse else {
             throw KomodoError(status: -1, message: "No HTTP response from \(url.absoluteString)")
         }
-        guard (200..<300).contains(http.statusCode) else {
-            throw KomodoError(status: http.statusCode, message: Self.extractMessage(from: data, status: http.statusCode))
+        guard (200 ..< 300).contains(http.statusCode) else {
+            throw KomodoError(
+                status: http.statusCode,
+                message: Self.extractMessage(from: data, status: http.statusCode),
+            )
         }
         return data
     }

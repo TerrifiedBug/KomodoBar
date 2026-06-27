@@ -14,6 +14,15 @@ disabled_rules:
 excluded:
   - .build
   - build
+# swiftformat adds trailing commas to multiline collections; require them here so
+# the two tools agree instead of fighting.
+trailing_comma:
+  mandatory_comma: true
+# Allow short, conventional names (enum `ok`, geometry `x`/`y`, async-let `ss`).
+identifier_name:
+  min_length:
+    warning: 1
+    error: 1
 line_length:
   warning: 140
   error: 200

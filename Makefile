@@ -9,7 +9,7 @@ test:
 	swift test
 
 lint:
-	swiftformat --lint Sources Tests
+	swiftformat Sources Tests --lint
 	swiftlint --strict
 
 format:

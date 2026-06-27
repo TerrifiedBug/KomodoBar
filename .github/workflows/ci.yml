@@ -20,7 +20,7 @@ jobs:
       - name: Lint
         run: |
           brew install swiftformat swiftlint
-          swiftformat --lint Sources Tests
+          swiftformat Sources Tests --lint
           swiftlint --strict
       - name: Build
         run: swift build
