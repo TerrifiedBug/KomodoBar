@@ -144,6 +144,45 @@ public enum DeploymentState: String, Sendable, CaseIterable, Decodable {
     }
 }
 
+// MARK: - Procedures / Actions (runnable automations)
+
+/// Last-run state of a Procedure or Action.
+public enum ExecState: String, Sendable, CaseIterable, Decodable {
+    case ok, running, failed, unknown
+
+    public init(from decoder: any Decoder) throws {
+        let raw = (try? decoder.singleValueContainer().decode(String.self)) ?? ""
+        self = ExecState(rawValue: raw.lowercased()) ?? .unknown
+    }
+
+    public var severity: HealthSeverity {
+        switch self {
+        case .ok: .healthy
+        case .running: .warning
+        case .failed: .error
+        case .unknown: .unknown
+        }
+    }
+}
+
+/// A runnable Procedure or Action (same list shape). `id` runs it; `state` gives a
+/// leading ok/running/failed dot.
+public struct ExecResourceItem: Decodable, Sendable, Identifiable {
+    public let id: String
+    public let name: String
+    public let state: ExecState
+
+    enum CodingKeys: String, CodingKey { case id, name, info }
+    private struct Info: Decodable { let state: ExecState? }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = (try? c.decode(String.self, forKey: .id)) ?? ""
+        self.name = (try? c.decode(String.self, forKey: .name)) ?? ""
+        self.state = (try? c.decode(Info.self, forKey: .info))?.state ?? .unknown
+    }
+}
+
 // MARK: - Summaries (GetServersSummary / GetStacksSummary)
 
 public struct ServersSummary: Decodable, Sendable {

@@ -221,6 +221,23 @@ private func decode<T: Decodable>(_: T.Type, _ json: String) throws -> T {
     #expect(empty.alerts.isEmpty)
 }
 
+// MARK: Procedures / Actions
+
+@Test func `exec resource decodes and maps state severity`() throws {
+    let json = """
+    { "id": "p1", "type": "Procedure", "name": "Nightly backup", "info": { "state": "Ok" } }
+    """
+    let item = try decode(ExecResourceItem.self, json)
+    #expect(item.name == "Nightly backup")
+    #expect(item.state == .ok)
+    #expect(ExecState.ok.severity == .healthy)
+    #expect(ExecState.failed.severity == .error)
+    #expect(ExecState.running.severity == .warning)
+    // Missing state tolerated → unknown.
+    let bare = try decode(ExecResourceItem.self, "{ \"id\": \"a1\", \"name\": \"x\", \"info\": {} }")
+    #expect(bare.state == .unknown)
+}
+
 // MARK: Per-server grouping
 
 @Test func `group stacks by server sorts and buckets unknown into Other`() throws {

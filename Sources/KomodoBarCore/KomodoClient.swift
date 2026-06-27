@@ -109,6 +109,14 @@ public struct KomodoClient: Sendable {
         try await self.read("GetDockerContainersSummary")
     }
 
+    public func listProcedures() async throws -> [ExecResourceItem] {
+        try await self.read("ListProcedures")
+    }
+
+    public func listActions() async throws -> [ExecResourceItem] {
+        try await self.read("ListActions")
+    }
+
     /// Realtime CPU/mem/disk for one server. Served from Core's in-memory cache.
     public func systemStats(server idOrName: String) async throws -> SystemStats {
         try await self.call("read", "GetSystemStats", ["server": idOrName])
@@ -182,6 +190,14 @@ public struct KomodoClient: Sendable {
 
     public func restartDeployment(_ idOrName: String) async throws {
         try await self.fire("RestartDeployment", ["deployment": idOrName])
+    }
+
+    public func runProcedure(_ idOrName: String) async throws {
+        try await self.fire("RunProcedure", ["procedure": idOrName])
+    }
+
+    public func runAction(_ idOrName: String) async throws {
+        try await self.fire("RunAction", ["action": idOrName])
     }
 
     /// Admin-only global poll for updates on poll/auto-update-enabled resources.
